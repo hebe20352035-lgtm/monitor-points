@@ -241,7 +241,7 @@ function legalOf(ch) {
   if (!ch) return 'unknown';
   var m = ch.m;
   if (m === '否') return 'no';
-  if (m === '應實施' || m === '116.01.01 起應實施') return 'yes';
+  if (m === '應實施' || m === '116.01.01 起應實施' || m === '依粉塵作業判斷') return 'yes';
   return 'check';
 }
 function tierOf(r) {
