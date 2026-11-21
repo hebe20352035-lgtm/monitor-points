@@ -120,6 +120,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
     <div class="row" style="margin-top:10px">
       <button class="btn sm" id="addSeg">＋ SEG</button>
       <button class="btn sm" id="openImp">貼上匯入</button>
+      <button class="btn sm" id="openConc">貼上濃度</button>
       <details class="more"><summary class="btn sm">更多 ▾</summary><div class="morebox">
         <button class="btn sm" id="exp">匯出檔案</button>
         <button class="btn sm" id="impFileBtn">匯入檔案</button><input type="file" id="impFile" accept=".json" hidden>
@@ -168,6 +169,13 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 
 </main>
 
+<div class="modal" id="concModal"><div class="box">
+  <b>貼上上一次濃度（單次結果）</b>
+  <div class="hint" style="margin:4px 0 6px">每行一筆：化學品, 場所, 濃度, 單位。系統依化學品加場所自動對到 SEG。已有統計表 X95 的項目不會被覆蓋。</div>
+  <div class="row" style="margin-bottom:6px"><button class="btn sm" id="concImg">從截圖讀取</button><input type="file" id="concImgFile" accept="image/*" style="display:none"><span class="hint" id="concImgSt"></span></div>
+  <textarea id="concText" placeholder="丙酮,E棟2F 儲區(定點),<0.525,ppm"></textarea>
+  <div class="row" style="margin-top:8px"><button class="btn pri" id="concGo">套用</button><button class="btn del" id="concClose">取消</button></div>
+</div></div>
 <div class="modal" id="impModal"><div class="box">
   <h2 style="margin:0 0 6px;font-size:16px">貼上匯入</h2>
   <div class="hint" style="margin-bottom:6px">每行一筆，欄位用 Tab 或逗號分隔：<br>SEG代號, 區域名稱, 作業組別, 人數, 項目, 現況點數, 濃度, 單位, 來源(X95 或 單次)<br>例：SEG01, A1生產區, 生產區, 12, 丙酮, 1, 0.8, ppm, X95<br>來源留空視為「單次結果」，會被列為缺統計表。</div>
@@ -938,6 +946,91 @@ $('#docFile').onchange=async function(){
     syncTop();renderSegs();save();update(true);showReport(r,f.name);
   }catch(e){alert('讀取失敗：'+e.message+'\n若是舊版 .doc，請用 Word 另存成 .docx 再匯入。')}
 };
+
+
+/* ---------- 貼上上一次濃度 ---------- */
+function placeCore(s){
+  s=String(s||'').replace(/[（]/g,'(').replace(/[）]/g,')');
+  s=s.replace(/\([^)]*\)/g,'').replace(/STEL/ig,'').replace(/[\s　]+/g,'');
+  s=s.replace(/^([A-Za-z]{1,2}棟?\d*[F樓]?)(?=[^\d])/,'');
+  return s}
+function sameChem(a,b){if(statMatch(a,b))return true;var ca=findChem(IDX,a),cb=findChem(IDX,b);return !!(ca&&cb&&ca===cb)}
+function applyConc(text){
+  var rep={ok:0,miss:[],multi:[],skip:[]};var hits={};
+  text.split(/\r?\n/).forEach(function(ln){
+    ln=ln.trim();if(!ln)return;var p=ln.indexOf('\t')>=0?ln.split('\t'):ln.split(/[,，]/);p=p.map(function(s){return s.trim()});
+    if(p.length<3||/^化學品/.test(p[0]))return;
+    var chem=p[0],place=p[1],val=String(p[2]).replace(/[<＜\s]/g,''),unit=p[3]||'';
+    if(!/^[\d.]+$/.test(val)){rep.miss.push(ln+'（濃度不是數字）');return}
+    var pc=placeCore(place),codeM=place.match(/SEG\d+/i);
+    var seg=state.segs.filter(function(g){
+      if(codeM&&g.code.toUpperCase()===codeM[0].toUpperCase())return true;
+      var gc=placeCore(g.name);return gc&&pc&&gc===pc});
+    if(!seg.length)seg=state.segs.filter(function(g){var gc=placeCore(g.name);return gc&&pc&&gc.length>=3&&pc.length>=3&&(gc.indexOf(pc)>=0||pc.indexOf(gc)>=0)});
+    var done=false;
+    seg.forEach(function(g){(g.items||[]).forEach(function(it){
+      if(!it.name||!sameChem(it.name,chem))return;
+      if(rowKind(it)==='k-gray'){done=true;return}
+      var key=g.code+'|'+it.name;
+      if(it.src==='x95'&&String(it.conc).trim()!==''){rep.skip.push(g.code+' '+it.name+'（已有統計表 X95）');done=true;return}
+      var v=parseFloat(val);
+      if(hits[key]!==undefined){rep.multi.push(g.code+' '+it.name+'：多筆取最大值');if(v<=hits[key]){done=true;return}}
+      hits[key]=v;it.conc=val;it.src='single';
+      it.unit=/mg/i.test(unit)?'mg/m³':(/ppm/i.test(unit)?'ppm':it.unit);
+      if(it.flag==='name')delete it.flag;
+      done=true});});
+    if(done)rep.ok++;else rep.miss.push(chem+' @ '+place)});
+  return rep}
+
+/* ---------- 截圖 OCR → 濃度文字 ---------- */
+function ocrToLines(txt){
+  var out=[];
+  txt.split(/\r?\n/).forEach(function(raw){
+    var s=raw.replace(/[\s　|｜]+/g,'').replace(/[＜]/g,'<').replace(/[（]/g,'(').replace(/[）]/g,')');
+    if(s.length<4)return;
+    var um=s.match(/(mg\/m[3³]|mg\/m|ppm)/i); if(!um){return}
+    var unit=/mg/i.test(um[1])?'mg/m3':'ppm';
+    var before=s.slice(0,um.index);
+    var vm=before.match(/<?\d+\.?\d*$/); if(!vm){out.push('??,'+raw.trim()+',,'+unit);return}
+    var val=vm[0].replace('<','<'); var head=before.slice(0,vm.index);
+    head=head.replace(/^\d{2,3}[\/.]\d{1,2}[\/.]\d{1,2}/,'');
+    var chem='',best=0;
+    for(var n=2;n<=Math.min(12,head.length);n++){var c=head.slice(0,n);if(findChem(IDX,c)||/^第.種(總|可呼吸性)?粉塵$/.test(c)){chem=c;best=n}}
+    if(!chem){out.push('??,'+head+','+val+','+unit);return}
+    out.push(chem+','+head.slice(best)+','+val+','+unit)});
+  return out.join('\n')}
+window.__ocr=ocrToLines;
+function loadTess(){return new Promise(function(ok,no){
+  if(window.Tesseract)return ok();
+  var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+  s.onload=ok;s.onerror=function(){no(new Error('無法載入辨識元件（需連網）'))};document.head.appendChild(s)})}
+function prepImg(file){return new Promise(function(ok,no){
+  var im=new Image();im.onload=function(){var k=Math.max(1,Math.min(3,2400/im.width)),c=document.createElement('canvas');
+    c.width=im.width*k;c.height=im.height*k;var x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(im,0,0,c.width,c.height);
+    var d=x.getImageData(0,0,c.width,c.height),p=d.data;for(var i=0;i<p.length;i+=4){var g=(p[i]*.3+p[i+1]*.59+p[i+2]*.11);g=g>170?255:(g<110?0:g);p[i]=p[i+1]=p[i+2]=g}
+    x.putImageData(d,0,0);ok(c)};im.onerror=function(){no(new Error('圖片無法開啟'))};im.src=URL.createObjectURL(file)})}
+$('#concImg').onclick=function(){$('#concImgFile').click()};
+$('#concImgFile').onchange=async function(e){
+  var f=e.target.files[0];if(!f)return;var st=$('#concImgSt');e.target.value='';
+  try{st.textContent='載入辨識元件…（第一次較久）';await loadTess();
+    var c=await prepImg(f);
+    var r=await Tesseract.recognize(c,'chi_tra+eng',{logger:function(m){if(m.status)st.textContent='辨識中：'+m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
+    var res=ocrToLines(r.data.text);
+    if(!res){st.textContent='沒讀到可用的列，請改用貼文字';return}
+    $('#concText').value=res;
+    st.textContent='已讀入，請逐行核對數字（標 ?? 的是沒讀懂的列，要改或刪）後按套用'}
+  catch(err){st.textContent='失敗：'+err.message+'。請改傳截圖給我轉文字'}};
+
+$('#openConc').onclick=function(){$('#concModal').classList.add('show')};
+$('#concClose').onclick=function(){$('#concModal').classList.remove('show')};
+$('#concGo').onclick=function(){
+  var r=applyConc($('#concText').value);
+  renderSegs();save();update(true);$('#concModal').classList.remove('show');$('#concText').value='';
+  var h='<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>已填入上一次濃度</b><button class="btn sm" id="repClose">關閉</button></div><div>成功 '+r.ok+' 筆</div>';
+  if(r.skip.length)h+='<div class="note">未覆蓋：'+esc(r.skip.join('、'))+'</div>';
+  if(r.multi.length)h+='<div class="note">'+esc(r.multi.filter(function(v,i,a){return a.indexOf(v)===i}).join('、'))+'</div>';
+  if(r.miss.length)h+='<div class="note" style="color:#C0392B"><b>對不到 SEG／化學品：</b><ul style="margin:4px 0 0 18px;padding:0">'+r.miss.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>';
+  $('#impReport').innerHTML=h+'</div>';$('#repClose').onclick=function(){$('#impReport').innerHTML=''}};
 
 $('#exp').onclick=function(){
   var b=new Blob([JSON.stringify({state:state,SET:SET})],{type:'application/json'});var a=document.createElement('a');
