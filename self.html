@@ -465,7 +465,7 @@ function rowKind(it){
   if(PHYS.test(it.name)||/短時間/.test(it.method||''))return'k-gray';
   var inf=itemInfo(it);var lg=legalOf(inf.ch);
   if(lg==='no'||(inf.ch&&inf.ch.m==='依場所判斷'))return'k-gray';
-  var ok=String(it.cur).trim()!==''&&inf.ratio!==null&&!it.flag&&lg!=='unknown';
+  var ok=String(it.cur).trim()!==''&&inf.ratio!==null&&!it.flag&&!it.sflag&&lg!=='unknown';
   return ok?'k-green':'k-red';
 }
 function itemRow(g,it,gi,ii){
@@ -474,7 +474,7 @@ function itemRow(g,it,gi,ii){
   return'<tr data-i="'+ii+'" class="'+kd+'">'+
   '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+'</td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
-  (gray?'<td class="na" colspan="2">不需填濃度，維持現況點數</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字"></td>'+
+  (gray?'<td class="na" colspan="2">不需填濃度，維持現況點數</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字">'+(it.sflag?'<span class="fn">統計表寫在 '+esc(it.sflag.from)+'<button data-act="okS">確認無誤</button></span>':'')+'</td>'+
   '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>')+
   '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
   '<td class="adv-col"><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
@@ -486,6 +486,7 @@ $('#segs').addEventListener('input',function(e){
   var gEl=t.closest('.seg');var g=state.segs[+gEl.dataset.g];
   var tr=t.closest('tr');
   if(tr){var it=g.items[+tr.dataset.i];it[f]=t.value;
+    if(it.sflag&&(f==='conc'||f==='name'))delete it.sflag;
     if(it.flag&&it.flag===f){delete it.flag;t.classList.remove('bad');var fn0=t.parentNode.querySelector('.fn');if(fn0)fn0.remove()}
     var oldK=tr.className;var newK=rowKind(it);
     if((oldK==='k-gray')!==(newK==='k-gray')&&(f==='name')){save();update(false);renderSegs();return}
@@ -500,6 +501,7 @@ $('#segs').addEventListener('input',function(e){
 $('#segs').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var gEl=b.closest('.seg');var g=state.segs[+gEl.dataset.g];
+  if(b.dataset.act==='okS'){var si=+b.closest('tr').dataset.i;delete g.items[si].sflag;renderSegs();save();update(true);return}
   if(b.dataset.act==='okFlag'){delete g.flag[b.dataset.k];renderSegs();save();update(true);return}
   if(b.dataset.act==='delSeg'){if(confirm('刪除 '+g.code+'？')){state.segs.splice(+gEl.dataset.g,1);renderSegs()}}
   else if(b.dataset.act==='addItem'){g.items.push(newItem());renderSegs()}
@@ -545,6 +547,7 @@ function update(regen){
   var cf=[];state.segs.forEach(function(g){
     if(g.flag&&g.flag.name&&!g.flag.name.soft)cf.push(g.code+' 場所名稱：彙整表「'+g.name+'」，採樣策略表「'+g.flag.name.other+'」');
     if(g.flag&&g.flag.people)cf.push(g.code+' 人數：彙整表 '+g.people+'，採樣策略表 '+g.flag.people.other);
+    (g.items||[]).forEach(function(i){if(i.sflag)cf.push(g.code+' '+i.name+'：統計表寫在 '+i.sflag.from+'，採樣策略表在 '+g.code)});
     (g.items||[]).forEach(function(i){if(i.flag==='name')cf.push(g.code+' '+i.name+'：只在採樣策略表，彙整表沒有')});
   });
   G.issues.confirm=cf;G.count+=cf.length;if(cf.length)G.complete=false;
@@ -826,7 +829,7 @@ async function picTokens(p){
   try{var data=p.data;if(p.comp===0)data=await inflateBytes(data);return(p.emf?emfTexts(data):wmfTexts(data)).map(function(x){return{x:x.x,y:x.y,t:String(x.t).trim()}}).filter(function(x){return x.t})}catch(e){return[]}
 }
 function parseStatTokens(tk){
-  var dates=tk.filter(function(a){return /^\d{2,3}\.\d{2}\.\d{2}$/.test(a.t)});
+  var dates=tk.filter(function(a){return /^\d{2,3}[.\/]?\d{2}[.\/]?\d{2}$/.test(a.t)&&a.t.replace(/\D/g,'').length>=6});
   var segs=tk.filter(function(a){return /^SEG\d+$/i.test(a.t)});
   if(!segs.length||dates.length<2)return null;
   var minX=Math.min.apply(null,segs.map(function(a){return a.x}));
@@ -933,15 +936,19 @@ async function parseDocx(file){
   for(var pi=0;pi<(raw.pics||[]).length&&!statRows;pi++){var tk=await picTokens(raw.pics[pi]);statRows=parseStatTokens(tk)}
   if(statRows&&statRows.length){res.stat=statRows}
   else res.notes.push('找不到歷年統計表（X95），濃度需另外提供');
-  res.segs=order.map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});if(!s.items.length&&c!=='全廠')res.notes.push(c+' 採樣策略表沒有任何化學品（不列入測點）');return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.method)o.method=i.method;if(i.flag)o.flag=i.flag;return o})}});
+  res.segs=order.map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});if(!s.items.length&&c!=='全廠')res.notes.push(c+' 採樣策略表沒有任何化學品（不列入測點）');return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.method)o.method=i.method;if(i.flag)o.flag=i.flag;if(i.sflag)o.sflag=i.sflag;return o})}});
   if(res.stat){var applied=0;
     res.stat.forEach(function(sr){var sg=res.segs.filter(function(g){return g.code===sr.seg})[0];
       if(!sg){res.notes.push('統計表 '+sr.seg+'：計畫書沒有這個 SEG');return}
-      var hits=sg.items.filter(function(i){return statMatch(i.name,sr.name)});
-      if(!hits.length){res.notes.push('統計表 '+sr.seg+' '+sr.name+'：找不到對應的化學品');return}
+      var hits=sg.items.filter(function(i){return statMatch(i.name,sr.name)});var sfrom='';
+      if(!hits.length){
+        var alt=[];res.segs.forEach(function(g2){if(g2===sg)return;var h2=g2.items.filter(function(i){return statMatch(i.name,sr.name)});if(h2.length)alt.push({g:g2,h:h2})});
+        if(alt.length===1&&sr.x95){hits=alt[0].h;sfrom=sr.seg+'→'+alt[0].g.code;sg=alt[0].g}
+        else{res.notes.push('統計表 '+sr.seg+' '+sr.name+'：找不到對應的化學品');return}}
       if(!sr.x95){res.notes.push('統計表 '+sr.seg+' '+sr.name+'：沒有第95百分位數值');return}
       var mm=normT(sr.name).match(/第(.)種粉塵\((總|可呼吸性)粉塵\)/);
-      hits.forEach(function(i){if(mm&&/粉塵/.test(i.name)&&!/總|可呼吸/.test(i.name))i.name='第'+mm[1]+'種'+mm[2]+'粉塵';i.conc=sr.x95;i.src='x95';i.unit=/mg/i.test(sr.unit)?'mg/m³':(/ppm/i.test(sr.unit)?'ppm':'');applied++})});
+      hits.forEach(function(i){if(mm&&/粉塵/.test(i.name)&&!/總|可呼吸/.test(i.name))i.name='第'+mm[1]+'種'+mm[2]+'粉塵';if(sfrom)i.sflag={from:sr.seg,to:sg.code};i.conc=sr.x95;i.src='x95';i.unit=/mg/i.test(sr.unit)?'mg/m³':(/ppm/i.test(sr.unit)?'ppm':'');applied++})});
+    res.segs.forEach(function(g){g.items.forEach(function(i){if(i.sflag)res.notes.push('統計表寫在 '+i.sflag.from+'「'+i.name+'」，但採樣策略表這項在 '+i.sflag.to+'，已先填入 '+i.sflag.to+'，請確認 SEG 代號')})});
     res.ok.push('歷年統計表：讀到 '+res.stat.length+' 列，填入 '+applied+' 項 X95');
   }
   res.groups=order.filter(function(c){return c!=='全廠'}).map(function(c){return c+'→'+(segs[c].dept||segs[c].name)});
