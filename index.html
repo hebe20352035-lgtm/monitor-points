@@ -726,8 +726,10 @@ function docBlocks(buf){
     var cnt={};bk.rows.forEach(function(r){cnt[r.length]=(cnt[r.length]||0)+1});
     var N=0,best=0;Object.keys(cnt).map(Number).sort(function(x,y){return x-y}).forEach(function(k){if(k>=2&&cnt[k]>best){best=cnt[k];N=k}});
     var g=[];bk.rows.forEach(function(r){
-      if(N&&r.length>N&&(r.length+1)%(N+1)===0){var ok=true;for(var i=N;i<r.length;i+=N+1)if(r[i]!=='')ok=false;
-        if(ok){for(var s0=0;s0<r.length;s0+=N+1)g.push(r.slice(s0,s0+N));return}}
+      var cands=[N];var n0=0;while(n0<r.length&&r[n0]!=='')n0++;if(n0>=3&&n0<r.length)cands.push(n0);
+      for(var ci=0;ci<cands.length;ci++){var NN=cands[ci];
+        if(NN&&r.length>NN&&(r.length+1)%(NN+1)===0){var ok=true;for(var i=NN;i<r.length;i+=NN+1)if(r[i]!=='')ok=false;
+          if(ok){for(var s0=0;s0<r.length;s0+=NN+1)g.push(r.slice(s0,s0+NN));return}}}
       g.push(r)});
     return{grid:g,prev:bk.prev}});
   return out;
