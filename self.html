@@ -80,7 +80,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 details.more{position:relative}details.more summary{list-style:none;display:inline-block}details.more summary::-webkit-details-marker{display:none}
 .morebox{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:150px;margin-top:4px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .morebox .btn{text-align:left}
-.total{display:flex;gap:28px;margin:6px 0 4px}.total div{display:flex;flex-direction:column}.total b{font-size:34px;line-height:1.1;color:var(--accent)}.total span{font-size:12px;color:var(--ink2)}
+.total{display:flex;gap:22px;flex-wrap:wrap;margin:6px 0 4px}.total div{display:flex;flex-direction:column}.total b{font-size:34px;line-height:1.1;color:var(--accent)}.total span{font-size:12px;color:var(--ink2)}
 details.fold{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}details.fold summary{cursor:pointer;color:var(--ink2);font-size:13px}
 table.res.fin{min-width:420px}table.res.fin td.big{font-size:16px;font-weight:700;text-align:center}
 tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)}
@@ -122,10 +122,13 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
     <div id="guard"></div>
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><button class="btn sm" id="copyTbl">複製</button></div>
-      <div class="total"><div><b id="sNew">0</b><span>每輪測點</span></div><div><b id="sYear">0</b><span>全年測點</span></div></div>
+      <div class="total"><div><b id="sNew">0</b><span>每輪測點</span></div><div><b id="sYear">0</b><span>全年測點</span></div><div><b id="s3Year">0</b><span>三年測點</span></div></div>
       <div id="sNewLb" class="hint"></div>
       <div class="scroll" style="margin-top:8px"><table class="res fin" id="finTbl"></table></div>
       <div id="extraLine" class="note"></div>
+      <h3 style="margin:16px 0 6px;font-size:15px">各化學品報價數量</h3>
+      <div class="row" style="margin-bottom:6px"><label class="f" style="width:200px">頻率（次）<select id="qfreq"><option value="1">1 次＝每六個月報價</option><option value="2">2 次＝年約</option><option value="6">6 次＝三年約</option></select></label><button class="btn sm" id="copyChem" style="align-self:flex-end">複製</button></div>
+      <div class="scroll"><table class="res fin" id="chemTbl"></table></div>
       <details class="fold"><summary>計算細節（級距、頻率、與現況對照）</summary>
         <div id="warnLine" class="note"></div>
         <div class="scroll"><table class="res" id="resTbl"></table></div>
@@ -498,20 +501,28 @@ function update(regen){
   var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
   var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
   renderGuard(G);
-  $('#sNew').textContent=S.final;$('#sYear').textContent=Math.round(S.finalYear*10)/10;
+  $('#sNew').textContent=S.final;$('#sYear').textContent=Math.round(S.finalYear*10)/10;$('#s3Year').textContent=Math.round(S.finalYear*30)/10;
   var d=S.final-S.cur;
   $('#sNewLb').textContent=(G.complete?'':'暫估・')+'現況 '+S.cur+' 點 → 調整後 '+S.final+' 點（'+(d>0?'+':'')+d+'）。全年以每 6 個月一次、達 PEL 者每 3 個月一次計。';
   var fr=finRows(R);var h='';
   if(fr.length){
-    h='<thead><tr><th>SEG／區域</th><th>項目</th><th>測點</th><th>全年</th><th>備註</th></tr></thead><tbody>';
+    h='<thead><tr><th>SEG／區域</th><th>項目</th><th>測點</th><th>全年</th><th>三年</th><th>備註</th></tr></thead><tbody>';
     var last='';
     fr.forEach(function(r){
       var yr=Math.round(r.n*(12/r.freq)*10)/10;
-      h+='<tr><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td>'+esc(r.item)+'</td><td class="big">'+r.n+'</td><td class="num">'+yr+'</td><td class="hint">'+esc(r.note)+'</td></tr>';
+      h+='<tr><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td>'+esc(r.item)+'</td><td class="big">'+r.n+'</td><td class="num">'+yr+'</td><td class="num">'+Math.round(yr*3*10)/10+'</td><td class="hint">'+esc(r.note)+'</td></tr>';
     });
-    h+='<tr><td colspan="2"><b>合計</b></td><td class="big">'+S.final+'</td><td class="num"><b>'+Math.round(S.finalYear*10)/10+'</b></td><td></td></tr></tbody>';
+    h+='<tr><td colspan="2"><b>合計</b></td><td class="big">'+S.final+'</td><td class="num"><b>'+Math.round(S.finalYear*10)/10+'</b></td><td class="num"><b>'+Math.round(S.finalYear*30)/10+'</b></td><td></td></tr></tbody>';
   }else h='<tbody><tr><td class="hint">填入 SEG 與化學品後，這裡會自動產生報價測點數。</td></tr></tbody>';
   $('#finTbl').innerHTML=h;
+  var agg={};fr.forEach(function(r){agg[r.item]=(agg[r.item]||0)+r.n});
+  var names=Object.keys(agg).sort();var q=parseInt($('#qfreq').value)||1;var tot=0,h3='';
+  if(names.length){
+    h3='<thead><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
+    names.forEach(function(nm,i){var c=Math.round(agg[nm]*10)/10;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td>'+esc(nm)+'</td><td class="big">'+c+'</td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
+    h3+='<tr><td colspan="2"><b>合計</b></td><td class="num"><b>'+Math.round(tot/q*10)/10+'</b></td><td class="num">'+q+'</td><td class="num"><b>'+Math.round(tot*10)/10+'</b></td></tr></tbody>';
+  }
+  $('#chemTbl').innerHTML=h3;window._C={names:names,agg:agg,q:q,tot:tot};
   var rows=R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:(a.seg<b.seg?-1:1)});
   var h2='<thead><tr><th>項目</th><th>SEG／區域</th><th>人數</th><th>濃度（佔PEL）</th><th>級距</th><th>頻率</th><th class="num">現況</th><th class="num">新制</th><th class="num">增減</th><th>備註</th></tr></thead><tbody>';
   rows.forEach(function(r){
@@ -564,10 +575,12 @@ function copyText(t,btn){
 }
 $('#copySay').onclick=function(){copyText($('#say').value,this)};
 $('#copyTbl').onclick=function(){
-  var R=window._R,F=window._F;if(!R)return;var L=[['SEG','區域','項目','測點','全年','備註'].join('\t')];
-  F.forEach(function(r){L.push([r.seg,r.segName,r.item,r.n,Math.round(r.n*(12/r.freq)*10)/10,r.note].join('\t'))});
-  L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,''].join('\t'));
+  var R=window._R,F=window._F;if(!R)return;var L=[['SEG','區域','項目','測點','全年','三年','備註'].join('\t')];
+  F.forEach(function(r){L.push([r.seg,r.segName,r.item,r.n,Math.round(r.n*(12/r.freq)*10)/10,Math.round(r.n*(36/r.freq)*10)/10,r.note].join('\t'))});
+  L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,Math.round(R.sum.finalYear*30)/10,''].join('\t'));
   copyText(L.join('\n'),this)};
+$('#qfreq').onchange=function(){update()};
+$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
 $('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
 /* ---------- 匯入／匯出 ---------- */
