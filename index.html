@@ -76,7 +76,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 .modal .box{background:#fff;border-radius:12px;padding:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
 .modal textarea{width:100%;min-height:200px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
 [hidden]{display:none!important}
-.advg{display:none}body.advg .advg{display:block}.adv-col{display:none}body.adv .adv-col{display:table-cell}
+.seghead .advg{display:none!important}body.advg .seghead .advg{display:flex!important}.adv-col{display:none}body.adv .adv-col{display:table-cell}
 details.more{position:relative}details.more summary{list-style:none;display:inline-block}details.more summary::-webkit-details-marker{display:none}
 .morebox{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:150px;margin-top:4px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .morebox .btn{text-align:left}
@@ -89,6 +89,8 @@ input.bad,select.bad{border-color:#C0392B!important;background:#FDECEA!important
 .steps{display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap}.stp{flex:1 1 90px;text-align:center;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 4px;color:var(--ink2);background:#fff}
 .stp.done{border-color:var(--accent);color:var(--accent)}.stp.warn{border-color:#C0392B;color:#C0392B;background:#FDECEA;font-weight:700}
 .btn.big{width:100%;font-size:17px;padding:14px;margin-top:10px}
+tr.k-gray td{background:#E6E6E3}tr.k-green td{background:#E1F0E6}tr.k-red td{background:#FADDD9}
+tr.k-gray .na{color:#9A9A95;font-size:12px}
 tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)}
 </style>
 </head>
@@ -427,13 +429,22 @@ function itemStatus(it){
   else if(isNaN(inf.pel))s+='<span class="badge warn">PEL待輸入</span>';
   return s;
 }
+function rowKind(it){
+  if(!it.name)return'';
+  if(PHYS.test(it.name))return'k-gray';
+  var inf=itemInfo(it);var lg=legalOf(inf.ch);
+  if(lg==='no'||(inf.ch&&inf.ch.m==='依場所判斷'))return'k-gray';
+  var ok=String(it.cur).trim()!==''&&inf.ratio!==null&&!it.flag&&lg!=='unknown';
+  return ok?'k-green':'k-red';
+}
 function itemRow(g,it,gi,ii){
   var inf=itemInfo(it);var ph=isNaN(inf.pel)?'':inf.pel;
-  return'<tr data-i="'+ii+'">'+
+  var kd=rowKind(it);var gray=(kd==='k-gray');
+  return'<tr data-i="'+ii+'" class="'+kd+'">'+
   '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+'</td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
-  '<td><input data-f="conc" value="'+esc(it.conc)+'" placeholder="X95 或 <0.76"></td>'+
-  '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>'+
+  (gray?'<td class="na" colspan="2">不需填濃度，維持現況點數</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字"></td>'+
+  '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>')+
   '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
   '<td class="adv-col"><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
   '<td class="st">'+itemStatus(it)+'</td>'+
@@ -445,6 +456,9 @@ $('#segs').addEventListener('input',function(e){
   var tr=t.closest('tr');
   if(tr){var it=g.items[+tr.dataset.i];it[f]=t.value;
     if(it.flag&&it.flag===f){delete it.flag;t.classList.remove('bad');var fn0=t.parentNode.querySelector('.fn');if(fn0)fn0.remove()}
+    var oldK=tr.className;var newK=rowKind(it);
+    if((oldK==='k-gray')!==(newK==='k-gray')&&(f==='name')){save();update(false);renderSegs();return}
+    tr.className=newK;
     tr.querySelector('.st').innerHTML=itemStatus(it);
     if(f==='unit'||f==='name'){var inf=itemInfo(it);var pelI=tr.querySelector('[data-f=pel]');pelI.placeholder=isNaN(inf.pel)?'':inf.pel;
       var us=tr.querySelector('[data-f=unit]');us.options[0].text='自動('+inf.unit+')';}
