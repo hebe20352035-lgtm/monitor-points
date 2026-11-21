@@ -172,7 +172,6 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 <div class="modal" id="concModal"><div class="box">
   <b>貼上上一次濃度（單次結果）</b>
   <div class="hint" style="margin:4px 0 6px">每行一筆：化學品, 場所, 濃度, 單位。系統依化學品加場所自動對到 SEG。已有統計表 X95 的項目不會被覆蓋。</div>
-  <div class="row" style="margin-bottom:6px"><button class="btn sm" id="concImg">從截圖讀取</button><input type="file" id="concImgFile" accept="image/*" style="display:none"><span class="hint" id="concImgSt"></span></div>
   <textarea id="concText" placeholder="丙酮,E棟2F 儲區(定點),<0.525,ppm"></textarea>
   <div class="row" style="margin-top:8px"><button class="btn pri" id="concGo">套用</button><button class="btn del" id="concClose">取消</button></div>
 </div></div>
@@ -981,45 +980,6 @@ function applyConc(text){
       done=true});});
     if(done)rep.ok++;else rep.miss.push(chem+' @ '+place)});
   return rep}
-
-/* ---------- 截圖 OCR → 濃度文字 ---------- */
-function ocrToLines(txt){
-  var out=[];
-  txt.split(/\r?\n/).forEach(function(raw){
-    var s=raw.replace(/[\s　|｜]+/g,'').replace(/[＜]/g,'<').replace(/[（]/g,'(').replace(/[）]/g,')');
-    if(s.length<4)return;
-    var um=s.match(/(mg\/m[3³]|mg\/m|ppm)/i); if(!um){return}
-    var unit=/mg/i.test(um[1])?'mg/m3':'ppm';
-    var before=s.slice(0,um.index);
-    var vm=before.match(/<?\d+\.?\d*$/); if(!vm){out.push('??,'+raw.trim()+',,'+unit);return}
-    var val=vm[0].replace('<','<'); var head=before.slice(0,vm.index);
-    head=head.replace(/^\d{2,3}[\/.]\d{1,2}[\/.]\d{1,2}/,'');
-    var chem='',best=0;
-    for(var n=2;n<=Math.min(12,head.length);n++){var c=head.slice(0,n);if(findChem(IDX,c)||/^第.種(總|可呼吸性)?粉塵$/.test(c)){chem=c;best=n}}
-    if(!chem){out.push('??,'+head+','+val+','+unit);return}
-    out.push(chem+','+head.slice(best)+','+val+','+unit)});
-  return out.join('\n')}
-window.__ocr=ocrToLines;
-function loadTess(){return new Promise(function(ok,no){
-  if(window.Tesseract)return ok();
-  var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-  s.onload=ok;s.onerror=function(){no(new Error('無法載入辨識元件（需連網）'))};document.head.appendChild(s)})}
-function prepImg(file){return new Promise(function(ok,no){
-  var im=new Image();im.onload=function(){var k=Math.max(1,Math.min(3,2400/im.width)),c=document.createElement('canvas');
-    c.width=im.width*k;c.height=im.height*k;var x=c.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(im,0,0,c.width,c.height);
-    var d=x.getImageData(0,0,c.width,c.height),p=d.data;for(var i=0;i<p.length;i+=4){var g=(p[i]*.3+p[i+1]*.59+p[i+2]*.11);g=g>170?255:(g<110?0:g);p[i]=p[i+1]=p[i+2]=g}
-    x.putImageData(d,0,0);ok(c)};im.onerror=function(){no(new Error('圖片無法開啟'))};im.src=URL.createObjectURL(file)})}
-$('#concImg').onclick=function(){$('#concImgFile').click()};
-$('#concImgFile').onchange=async function(e){
-  var f=e.target.files[0];if(!f)return;var st=$('#concImgSt');e.target.value='';
-  try{st.textContent='載入辨識元件…（第一次較久）';await loadTess();
-    var c=await prepImg(f);
-    var r=await Tesseract.recognize(c,'chi_tra+eng',{logger:function(m){if(m.status)st.textContent='辨識中：'+m.status+(m.progress?' '+Math.round(m.progress*100)+'%':'')}});
-    var res=ocrToLines(r.data.text);
-    if(!res){st.textContent='沒讀到可用的列，請改用貼文字';return}
-    $('#concText').value=res;
-    st.textContent='已讀入，請逐行核對數字（標 ?? 的是沒讀懂的列，要改或刪）後按套用'}
-  catch(err){st.textContent='失敗：'+err.message+'。請改傳截圖給我轉文字'}};
 
 $('#openConc').onclick=function(){$('#concModal').classList.add('show')};
 $('#concClose').onclick=function(){$('#concModal').classList.remove('show')};
