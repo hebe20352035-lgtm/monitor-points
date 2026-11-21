@@ -76,7 +76,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 .modal .box{background:#fff;border-radius:12px;padding:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
 .modal textarea{width:100%;min-height:200px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
 [hidden]{display:none!important}
-.adv-col{display:none}body.adv .adv-col{display:table-cell}
+.advg{display:none}body.advg .advg{display:block}.adv-col{display:none}body.adv .adv-col{display:table-cell}
 details.more{position:relative}details.more summary{list-style:none;display:inline-block}details.more summary::-webkit-details-marker{display:none}
 .morebox{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:150px;margin-top:4px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
 .morebox .btn{text-align:left}
@@ -119,6 +119,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
         <button class="btn sm" id="impFileBtn">匯入檔案</button><input type="file" id="impFile" accept=".json" hidden>
         <button class="btn sm" id="loadEx">載入範例</button>
         <label style="font-size:13px"><input type="checkbox" id="advChk"> 顯示單位／PEL 欄</label>
+        <label style="font-size:13px"><input type="checkbox" id="advGrp"> 顯示作業組別</label>
         <button class="btn sm del" id="clearAll">清空</button>
       </div></details>
     </div>
@@ -365,7 +366,6 @@ function checkData(cs, CH) {
     var named = (g.items || []).filter(function (i) { return i.name && String(i.name).trim(); });
     var hasLegal = named.some(function (i) { var nm0 = String(i.name).trim(); if (PHYS.test(nm0)) return false; var c0 = findChem(idx, nm0); return !(c0 && (c0.m === '否' || c0.m === '依場所判斷')); });
     if (hasLegal && !(parseFloat(g.people) > 0)) I.t3.push(code + ' 作業人數');
-    if (hasLegal && total > 0 && total < 100 && !String(g.group || '').trim()) I.other.push(code + ' 作業組別（是否與其他 SEG 屬同類作業，請確認）');
     var miss = [];
     named.forEach(function (it) {
       var nm = String(it.name).trim();
@@ -420,7 +420,7 @@ function renderSegs(){
     h+='<div class="seg" data-g="'+gi+'"><div class="seghead">'+
     '<label class="f">SEG 代號<input data-f="code" value="'+esc(g.code)+'"></label>'+
     '<label class="f">區域／部門<input data-f="name" class="'+((g.flag&&g.flag.name&&!g.flag.name.soft)?'bad':'')+'" value="'+esc(g.name)+'">'+flagNote(g,'name')+'</label>'+
-    '<label class="f">作業組別<input data-f="group" value="'+esc(g.group)+'" placeholder="同類作業寫一樣"></label>'+
+    '<label class="f advg">作業組別<input data-f="group" value="'+esc(g.group)+'" placeholder="同類作業寫一樣"></label>'+
     '<label class="f">人數<input data-f="people" class="'+((g.flag&&g.flag.people)?'bad':'')+'" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'">'+flagNote(g,'people')+'</label>'+
     '<button class="btn sm del" data-act="delSeg">刪除 SEG</button></div>'+
     '<div class="items"><table><thead><tr><th style="width:22%">化學品（採樣策略表）</th><th style="width:8%">現況點數<br><span class="hint">採樣策略表</span></th><th style="width:14%">濃度</th><th style="width:11%">濃度來源</th><th class="adv-col" style="width:11%">單位</th><th class="adv-col" style="width:11%">PEL</th><th>佔PEL／狀態</th><th></th></tr></thead><tbody>';
@@ -605,6 +605,7 @@ $('#copyTbl').onclick=function(){
   copyText(L.join('\n'),this)};
 $('#qfreq').onchange=function(){update()};
 $('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
+$('#advGrp').onchange=function(){document.body.classList.toggle('advg',this.checked)};
 $('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
 /* ---------- 匯入／匯出 ---------- */
@@ -891,11 +892,13 @@ async function parseDocx(file){
         else{var pp=(String(rw[c9p]||'').match(/\d+/)||[''])[0];if(pp&&s2.people&&pp!==s2.people&&!(s2.flag&&s2.flag.people)){(s2.flag=s2.flag||{}).people={other:pp}}
           var pn=normT(place);if(place&&s2.name&&normT(s2.name)!==pn&&!(s2.flag&&s2.flag.name)){var a1=normT(s2.name);(s2.flag=s2.flag||{}).name={other:place,soft:(a1.indexOf(pn)>=0||pn.indexOf(a1)>=0)}}}}
       String(rw[c9i]||'').replace(/\n/g,'').split(/[、，]/).forEach(function(part){
-        var mm=part.trim().match(/^(.+?)[\(（]\s*(\d+(?:\.\d+)?)\s*[\)）]$/);if(!mm)return;
-        var nm=mm[1].trim(),n=mm[2];
+        part=part.trim();if(!part)return;
+        var mm=part.match(/^(.+?)[\(（]\s*(\d+(?:\.\d+)?)\s*[\)）]$/);
+        var nm=mm?mm[1].trim():part.replace(/[\(（][^\)）]*[\)）]$/,'').trim(),n=mm?mm[2]:'';
+        if(!nm||/^[-—–]+$/.test(nm))return;
         var it=s2._i[nm];
         if(!it){it={name:nm,cur:'',conc:'',src:'single',unit:'',pel:''};s2._i[nm]=it;s2.items.push(it)}
-        it.cur=String((parseFloat(it.cur)||0)+parseFloat(n));c9++;
+        if(n!=='')it.cur=String((parseFloat(it.cur)||0)+parseFloat(n));c9++;
       });
     }
     res.ok.push('採樣策略彙整表：'+c9+' 筆項目點數');
@@ -904,7 +907,7 @@ async function parseDocx(file){
   for(var pi=0;pi<(raw.pics||[]).length&&!statRows;pi++){var tk=await picTokens(raw.pics[pi]);statRows=parseStatTokens(tk)}
   if(statRows&&statRows.length){res.stat=statRows}
   else res.notes.push('找不到歷年統計表（X95），濃度需另外提供');
-  res.segs=order.map(function(c){var s=segs[c];if(!s.items.length&&c!=='全廠')res.notes.push(c+' 採樣策略表沒有任何化學品（不列入測點）');return{code:s.code,name:s.name,group:s.group||s.name,people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.flag)o.flag=i.flag;return o})}});
+  res.segs=order.map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});if(!s.items.length&&c!=='全廠')res.notes.push(c+' 採樣策略表沒有任何化學品（不列入測點）');return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.flag)o.flag=i.flag;return o})}});
   if(res.stat){var applied=0;
     res.stat.forEach(function(sr){var sg=res.segs.filter(function(g){return g.code===sr.seg})[0];
       if(!sg){res.notes.push('統計表 '+sr.seg+'：計畫書沒有這個 SEG');return}
@@ -922,7 +925,7 @@ function showReport(r,fname){
   var h='<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>已讀取</b><button class="btn sm" id="repClose">關閉</button></div>';
   h+='<div class="hint">'+esc(fname)+'</div><ul style="margin:6px 0 0 18px;padding:0">'+r.ok.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul>';
   if(r.notes.length)h+='<div class="note" style="color:#C0392B"><ul style="margin:0 0 0 18px;padding:0">'+r.notes.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>';
-  h+='<div class="hint">作業組別預設＝部門名稱，同類作業才寫一樣。</div></div>';
+  h+='</div>';
   $('#impReport').innerHTML=h;$('#repClose').onclick=function(){$('#impReport').innerHTML=''};
 }
 $('#docBtn').onclick=function(){$('#docFile').click()};
