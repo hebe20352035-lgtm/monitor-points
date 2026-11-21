@@ -44,7 +44,7 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-
 .seghead input,.row input{width:100%}
 @media(max-width:700px){.seghead{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.seghead .del{grid-column:2}}
 .items{margin-top:8px;overflow-x:auto}
-.items table{border-collapse:collapse;width:100%;min-width:640px}
+.items table{border-collapse:collapse;width:100%;min-width:560px}
 .items th{font-size:12px;color:var(--ink2);font-weight:500;text-align:left;padding:2px 4px}
 .items td{padding:2px 4px}
 .items input,.items select{width:100%}
@@ -76,6 +76,14 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 .modal .box{background:#fff;border-radius:12px;padding:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
 .modal textarea{width:100%;min-height:200px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
 [hidden]{display:none!important}
+.adv-col{display:none}body.adv .adv-col{display:table-cell}
+details.more{position:relative}details.more summary{list-style:none;display:inline-block}details.more summary::-webkit-details-marker{display:none}
+.morebox{position:absolute;z-index:10;background:#fff;border:1px solid var(--line);border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:150px;margin-top:4px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.morebox .btn{text-align:left}
+.total{display:flex;gap:28px;margin:6px 0 4px}.total div{display:flex;flex-direction:column}.total b{font-size:34px;line-height:1.1;color:var(--accent)}.total span{font-size:12px;color:var(--ink2)}
+details.fold{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}details.fold summary{cursor:pointer;color:var(--ink2);font-size:13px}
+table.res.fin{min-width:420px}table.res.fin td.big{font-size:16px;font-weight:700;text-align:center}
+tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)}
 </style>
 </head>
 <body>
@@ -91,37 +99,41 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 <section id="t-plan">
   <div class="card">
     <div class="row">
-      <label class="f" style="flex:1 1 160px;min-width:0">客戶名稱<input id="cname" placeholder="例：歐利得材料科技高雄廠"></label>
+      <label class="f" style="flex:1 1 160px;min-width:0">客戶名稱<input id="cname" placeholder="例：○○公司高雄廠"></label>
       <label class="f" style="width:120px;flex:none">全廠勞工人數<input id="total" type="number" inputmode="numeric" min="0" placeholder="51"></label>
       <span id="bigBadge" class="badge" style="align-self:flex-end;margin-bottom:6px">—</span>
     </div>
     <div class="row" style="margin-top:10px">
       <button class="btn pri sm" id="addSeg">＋ 新增 SEG</button>
       <button class="btn sm" id="openImp">貼上匯入</button>
-      <button class="btn sm" id="exp">匯出檔案</button>
-      <button class="btn sm" id="impFileBtn">匯入檔案</button><input type="file" id="impFile" accept=".json" hidden>
-      <button class="btn sm" id="loadEx">載入範例（歐利得）</button>
-      <button class="btn sm del" id="clearAll">清空</button>
+      <details class="more"><summary class="btn sm">更多 ▾</summary><div class="morebox">
+        <button class="btn sm" id="exp">匯出檔案</button>
+        <button class="btn sm" id="impFileBtn">匯入檔案</button><input type="file" id="impFile" accept=".json" hidden>
+        <button class="btn sm" id="loadEx">載入範例</button>
+        <label style="font-size:13px"><input type="checkbox" id="advChk"> 顯示單位／PEL 欄</label>
+        <button class="btn sm del" id="clearAll">清空</button>
+      </div></details>
     </div>
-    <div class="hint" style="margin-top:6px">每個 SEG 填：代號、區域名稱、<b>作業組別</b>（同一組別＝同類作業，名稱要寫一樣）、人數，再逐項填化學品、現況點數、最高濃度（未檢出可直接寫「&lt;0.76」）。物理性（噪音、高溫）不適用新制，填了也不會計入。</div>
+    <details class="fold"><summary>填寫說明</summary><div class="hint" style="margin-top:6px">資料來源：<b>工廠基本資料</b>（全廠人數）、<b>表三</b>（SEG、區域、人數、化學品）、<b>採樣策略彙整表</b>（現況點數）、<b>歷年統計表</b>（X95）。缺任何一項會進入防呆模式。同一「作業組別」名稱寫一樣＝同類作業。非法定化學品、噪音等物理性、二氧化碳不套新制，維持現況點數，仍計入報價總數。</div></details>
   </div>
   <div id="segs"></div>
 
   <div id="resultBox">
-    <div class="stats">
-      <div class="stat"><b id="sCur">0</b><span>現況法定點數（每輪）</span></div>
-      <div class="stat new"><b id="sNew">0</b><span>新制樣本數（每輪）</span></div>
-      <div class="stat"><b id="sYear">0</b><span>新制全年樣本數</span></div>
-    </div>
+    <div id="guard"></div>
     <div class="card">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">各項目建議</h2><button class="btn sm" id="copyTbl">複製結果表</button></div>
-      <div id="warnLine" class="note"></div>
-      <div class="scroll"><table class="res" id="resTbl"></table></div>
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><button class="btn sm" id="copyTbl">複製</button></div>
+      <div class="total"><div><b id="sNew">0</b><span>每輪測點</span></div><div><b id="sYear">0</b><span>全年測點</span></div></div>
+      <div id="sNewLb" class="hint"></div>
+      <div class="scroll" style="margin-top:8px"><table class="res fin" id="finTbl"></table></div>
       <div id="extraLine" class="note"></div>
-    </div>
-    <div class="card">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">給客戶的說明（可直接修改）</h2><span><button class="btn sm" id="regen">重新產生</button> <button class="btn sm pri" id="copySay">複製</button></span></div>
-      <textarea class="say" id="say"></textarea>
+      <details class="fold"><summary>計算細節（級距、頻率、與現況對照）</summary>
+        <div id="warnLine" class="note"></div>
+        <div class="scroll"><table class="res" id="resTbl"></table></div>
+      </details>
+      <details class="fold" id="sayBox"><summary>客戶說明</summary>
+        <div class="row" style="justify-content:flex-end;margin:6px 0"><button class="btn sm" id="forceSay" hidden>仍產生暫估版</button><button class="btn sm" id="regen">重新產生</button><button class="btn sm pri" id="copySay">複製</button></div>
+        <textarea class="say" id="say"></textarea>
+      </details>
     </div>
   </div>
 </section>
@@ -149,6 +161,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 <li>小族群但書（3～9 人至少 3 個、未達 3 人全採）是否也適用初始採樣與各級距。</li>
 <li>100 人以上「1/10～1/2 PEL：1 至 3 個樣本，且每年達 6 個」的實際樣本數。</li>
 <li>舊資料可用，不做初始採樣；未達 6 筆者以現有筆數統計。</li>
+<li>資料來源以四張表為準：工廠基本資料（全廠人數）、表三（SEG、區域、人數、化學品）、採樣策略彙整表（現況點數）、歷年統計表（X95）。缺任何一項進入防呆模式，列出缺漏清單，結果標「暫估」，不產生客戶說明；SEG 人數以表三為準，不採附件。</li>
 <li>未檢出（&lt;）直接去掉符號比數字，並列取樣本較少者。</li>
 <li>物理性（噪音、高溫）不適用新制，不計入。</li>
 <li>化學品是否法定依「危害性化學品資料」庫；PEL 為 114.04.11 版（甲苯 50 ppm）。法規具時效性，正式使用前請確認最新版本。</li>
@@ -158,7 +171,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 
 <div class="modal" id="impModal"><div class="box">
   <h2 style="margin:0 0 6px;font-size:16px">貼上匯入</h2>
-  <div class="hint" style="margin-bottom:6px">每行一筆，欄位用 Tab 或逗號分隔：<br>SEG代號, 區域名稱, 作業組別, 人數, 項目, 現況點數, 最高濃度, 單位(ppm 或 mg/m³，可省略)<br>例：SEG01, A1生產區, 生產區, 12, 丙酮, 1, &lt;0.572, ppm</div>
+  <div class="hint" style="margin-bottom:6px">每行一筆，欄位用 Tab 或逗號分隔：<br>SEG代號, 區域名稱, 作業組別, 人數, 項目, 現況點數, 濃度, 單位, 來源(X95 或 單次)<br>例：SEG01, A1生產區, 生產區, 12, 丙酮, 1, 0.8, ppm, X95<br>來源留空視為「單次結果」，會被列為缺統計表。</div>
   <textarea id="impText" placeholder="SEG01	A1生產區	生產區	12	丙酮	1	<0.572	ppm"></textarea>
   <div class="row" style="margin-top:8px"><button class="btn pri" id="impGo">匯入（附加）</button><button class="btn" id="impGo2">匯入（覆蓋目前 SEG）</button><button class="btn del" id="impClose">取消</button></div>
 </div></div>
@@ -232,29 +245,33 @@ function compute(cs, S, CH) {
   var idx = makeIndex(CH);
   var total = parseFloat(cs.total) || 0;
   var big = total >= 100;
-  var rows = [], nonLegal = [], phys = [], warn = [];
+  var rows = [], keep = [], nonLegal = [], phys = [], warn = [];
 
   (cs.segs || []).forEach(function (g) {
     (g.items || []).forEach(function (it) {
       if (!it.name || !String(it.name).trim()) return;
       var name = String(it.name).trim();
-      if (PHYS.test(name)) { phys.push(g.code + ' ' + name); return; }
+      function mkKeep(why) { var c0 = parseFloat(it.cur) || 0; keep.push({ seg: g.code || '', segName: g.name || '', item: name, cur: c0, n: c0, freq: 6, keep: true, why: why }); }
+      if (PHYS.test(name)) { phys.push(g.code + ' ' + name); mkKeep('物理性，維持現況'); return; }
       var ch = findChem(idx, name);
       var lg = legalOf(ch);
-      if (lg === 'no') { nonLegal.push(name + '（' + (g.code || '') + '）'); return; }
+      if (lg === 'no') { nonLegal.push(name + '（' + (g.code || '') + '）'); mkKeep('非法定，維持現況'); return; }
+      if (ch && ch.m === '依場所判斷') { mkKeep('依場所判斷，維持現況'); return; }
       var unit = it.unit || defaultUnit(ch);
       var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
       var c = parseConc(it.conc);
+      var src = it.src || 'x95';
       var ratio = (!isNaN(c.v) && !isNaN(pel) && pel > 0) ? c.v / pel : null;
       var people = parseFloat(g.people) || 0;
       var r = {
         seg: g.code || '', segName: g.name || '', group: String(g.group || g.name || g.code || '').trim(),
         people: people, item: name, ch: ch, legal: lg, unit: unit, pel: pel, conc: it.conc, nd: c.nd,
-        ratio: ratio, tier: tierOf(ratio), cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false
+        ratio: ratio, tier: tierOf(ratio), src: src, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false
       };
       if (lg === 'unknown') r.notes.push('資料庫查無，請確認名稱');
       if (lg === 'check') r.notes.push('是否法定待確認');
       if (isNaN(pel)) r.notes.push('PEL 待輸入');
+      if (src !== 'x95' && ratio !== null) r.notes.push('暫用單次結果（缺統計表）');
       rows.push(r);
     });
   });
@@ -314,16 +331,55 @@ function compute(cs, S, CH) {
   }
   rows.forEach(function (r) { r.notes = r.notes.filter(Boolean); });
 
-  var sum = { cur: 0, n: 0, year: 0, rounds: 0 };
+  var sum = { cur: 0, n: 0, year: 0, keepN: 0, keepYear: 0 };
   rows.forEach(function (r) {
     sum.cur += r.cur; sum.n += r.n; sum.year += r.n * (12 / r.freq);
   });
+  keep.forEach(function (k) { sum.cur += k.cur; sum.keepN += k.n; sum.keepYear += k.n * (12 / k.freq); });
+  sum.final = sum.n + sum.keepN; sum.finalYear = sum.year + sum.keepYear;
   sum.nonLegal = nonLegal; sum.phys = phys; sum.big = big; sum.total = total;
   sum.anyQuarterly = rows.some(function (r) { return !r.skip && r.freq === 3; });
-  return { rows: rows, sum: sum };
+  return { rows: rows, keep: keep, sum: sum };
 }
 
-if (typeof module !== 'undefined') module.exports = { compute: compute, parseConc: parseConc, findChem: findChem, makeIndex: makeIndex, defaultUnit: defaultUnit, autoPel: autoPel, legalOf: legalOf, DEFAULTS: DEFAULTS };
+function checkData(cs, CH) {
+  var idx = makeIndex(CH);
+  var I = { basic: [], t3: [], t9: [], stat: [], other: [] };
+  var total = parseFloat(cs.total);
+  if (!(total > 0)) I.basic.push('全廠勞工人數');
+  if (!cs.segs || !cs.segs.length) I.t3.push('尚無任何 SEG（相似暴露族群）資料');
+  (cs.segs || []).forEach(function (g) {
+    var code = g.code || '(未編號)';
+    if (!g.name) I.t3.push(code + ' 作業場所名稱');
+    var named = (g.items || []).filter(function (i) { return i.name && String(i.name).trim(); });
+    var hasLegal = named.some(function (i) { var nm0 = String(i.name).trim(); if (PHYS.test(nm0)) return false; var c0 = findChem(idx, nm0); return !(c0 && (c0.m === '否' || c0.m === '依場所判斷')); });
+    if (hasLegal && !(parseFloat(g.people) > 0)) I.t3.push(code + ' 作業人數');
+    if (!named.length) I.t3.push(code + ' 暴露危害物質');
+    if (hasLegal && total > 0 && total < 100 && !String(g.group || '').trim()) I.other.push(code + ' 作業組別（是否與其他 SEG 屬同類作業，請確認）');
+    var miss = [];
+    named.forEach(function (it) {
+      var nm = String(it.name).trim();
+      var ch = findChem(idx, nm);
+      if (PHYS.test(nm) || (ch && (ch.m === '否' || ch.m === '依場所判斷'))) {
+        if (it.cur === '' || it.cur === null || it.cur === undefined) I.t9.push(code + ' ' + nm + ' 現況採樣點數（維持現況項目）');
+        return;
+      }
+      if (!ch) I.other.push(code + ' ' + nm + '：化學品清單查無此名稱');
+      if (it.cur === '' || it.cur === null || it.cur === undefined) I.t9.push(code + ' ' + nm + ' 現況採樣點數');
+      var unit = it.unit || defaultUnit(ch);
+      var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
+      if (isNaN(pel)) I.other.push(code + ' ' + nm + '：PEL');
+      var c = parseConc(it.conc);
+      if (isNaN(c.v)) miss.push(nm + '（無任何濃度資料）');
+      else if ((it.src || 'x95') !== 'x95') miss.push(nm + '（目前暫用單次結果）');
+    });
+    if (miss.length) I.stat.push(code + '：' + miss.join('、'));
+  });
+  var n = 0; Object.keys(I).forEach(function (k) { n += I[k].length; });
+  return { issues: I, count: n, complete: n === 0 };
+}
+
+if (typeof module !== 'undefined') module.exports = { checkData: checkData, compute: compute, parseConc: parseConc, findChem: findChem, makeIndex: makeIndex, defaultUnit: defaultUnit, autoPel: autoPel, legalOf: legalOf, DEFAULTS: DEFAULTS };
 
 </script>
 <script>
@@ -336,7 +392,7 @@ var $=function(s){return document.querySelector(s)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({state:state,SET:SET}))}catch(e){}}
 function load(){try{var d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){state=d.state||state;if(MODE==='self'&&d.SET)SET=Object.assign({},DEFAULTS,d.SET)}}catch(e){}}
-function newItem(){return{name:'',cur:1,conc:'',unit:'',pel:''}}
+function newItem(){return{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}}
 function newSeg(n){return{code:'SEG'+String(n).padStart(2,'0'),name:'',group:'',people:'',items:[newItem()]}}
 
 /* ---------- 化學品清單 datalist ---------- */
@@ -352,7 +408,7 @@ function renderSegs(){
     '<label class="f">作業組別<input data-f="group" value="'+esc(g.group)+'" placeholder="同類作業寫一樣"></label>'+
     '<label class="f">人數<input data-f="people" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'"></label>'+
     '<button class="btn sm del" data-act="delSeg">刪除 SEG</button></div>'+
-    '<div class="items"><table><thead><tr><th style="width:26%">化學品</th><th style="width:9%">現況點數</th><th style="width:18%">最高濃度</th><th style="width:12%">單位</th><th style="width:14%">PEL</th><th>佔PEL／狀態</th><th></th></tr></thead><tbody>';
+    '<div class="items"><table><thead><tr><th style="width:22%">化學品（表三）</th><th style="width:8%">現況點數<br><span class="hint">採樣策略表</span></th><th style="width:14%">濃度</th><th style="width:11%">濃度來源</th><th class="adv-col" style="width:11%">單位</th><th class="adv-col" style="width:11%">PEL</th><th>佔PEL／狀態</th><th></th></tr></thead><tbody>';
     g.items.forEach(function(it,ii){h+=itemRow(g,it,gi,ii)});
     h+='</tbody></table><button class="btn sm" data-act="addItem" style="margin-top:6px">＋ 新增項目</button></div></div>';
   });
@@ -380,9 +436,10 @@ function itemRow(g,it,gi,ii){
   return'<tr data-i="'+ii+'">'+
   '<td><input data-f="name" list="chemlist" value="'+esc(it.name)+'" placeholder="中文名或 CAS"></td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" value="'+esc(it.cur)+'"></td>'+
-  '<td><input data-f="conc" value="'+esc(it.conc)+'" placeholder="例 <0.76"></td>'+
-  '<td><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
-  '<td><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
+  '<td><input data-f="conc" value="'+esc(it.conc)+'" placeholder="X95 或 <0.76"></td>'+
+  '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>'+
+  '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
+  '<td class="adv-col"><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
   '<td class="st">'+itemStatus(it)+'</td>'+
   '<td><button class="btn sm del" data-act="delItem">✕</button></td></tr>';
 }
@@ -413,49 +470,93 @@ $('#clearAll').onclick=function(){if(confirm('清空目前所有資料？')){sta
 /* ---------- 結果 ---------- */
 var sayDirty=false;
 function fmtPct(r){return r===null?'—':(r*100<0.01?'<0.01':(r*100).toFixed(r*100<1?2:1))+'%'}
+function renderGuard(G){
+  var el=$('#guard');
+  if(G.complete){el.innerHTML='<div class="hint" style="margin:0 0 10px;color:#2E7D4F">✓ 資料完整</div>';return}
+  var L=[['basic','工廠基本資料'],['t3','表三　相似暴露族群及暴露危害物質彙整表'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（第95百分位 X95）'],['other','其他需確認']];
+  var h='<div class="card" style="border-color:var(--warm);background:#FFF8EF"><div class="row" style="justify-content:space-between"><b style="color:var(--warm)">資料不齊，下方為暫估（'+G.count+' 項待補）</b><button class="btn sm" id="copyMiss">複製缺漏清單</button></div>';
+  L.forEach(function(x){var a=G.issues[x[0]];if(a.length){h+='<div class="note"><b>'+x[1]+'</b><ul style="margin:4px 0 0 18px;padding:0">'+a.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>'}});
+  el.innerHTML=h+'</div>';
+  $('#copyMiss').onclick=function(){copyText(missText(G),this)};
+}
+function missText(G){
+  var L=[['basic','工廠基本資料'],['t3','表三（相似暴露族群及暴露危害物質彙整表）'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（含第95百分位）'],['other','其他需確認']];
+  var s=['【資料缺漏清單】'+(state.name||'（客戶名稱未填）'),'為評估 116.1.1 新制測點數，尚缺下列資料，請補齊：'];var k=1;
+  L.forEach(function(x){var a=G.issues[x[0]];if(a.length){s.push(k+'. '+x[1]);a.forEach(function(t){s.push('   - '+t)});k++}});
+  return s.join('\n');
+}
+var forceSay=false;
+function finRows(R){
+  var list=[];
+  R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:r.item,n:r.n,freq:r.freq,note:(r.freq===3?'每3個月':'')+(r.src!=='x95'&&r.ratio!==null?(r.freq===3?'；':'')+'暫用單次結果':'')})});
+  R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:k.item,n:k.n,freq:k.freq,note:k.why})});
+  list.sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
+  return list;
+}
 function update(regen){
   var big=(parseFloat(state.total)||0)>=100;
-  var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge'+(state.total===''?'':'');
-  var R=compute(state,SET,CH);var S=R.sum;
-  $('#sCur').textContent=S.cur;$('#sNew').textContent=S.n;$('#sYear').textContent=Math.round(S.year*10)/10;
+  var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
+  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
+  renderGuard(G);
+  $('#sNew').textContent=S.final;$('#sYear').textContent=Math.round(S.finalYear*10)/10;
+  var d=S.final-S.cur;
+  $('#sNewLb').textContent=(G.complete?'':'暫估・')+'現況 '+S.cur+' 點 → 調整後 '+S.final+' 點（'+(d>0?'+':'')+d+'）。全年以每 6 個月一次、達 PEL 者每 3 個月一次計。';
+  var fr=finRows(R);var h='';
+  if(fr.length){
+    h='<thead><tr><th>SEG／區域</th><th>項目</th><th>測點</th><th>全年</th><th>備註</th></tr></thead><tbody>';
+    var last='';
+    fr.forEach(function(r){
+      var yr=Math.round(r.n*(12/r.freq)*10)/10;
+      h+='<tr><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td>'+esc(r.item)+'</td><td class="big">'+r.n+'</td><td class="num">'+yr+'</td><td class="hint">'+esc(r.note)+'</td></tr>';
+    });
+    h+='<tr><td colspan="2"><b>合計</b></td><td class="big">'+S.final+'</td><td class="num"><b>'+Math.round(S.finalYear*10)/10+'</b></td><td></td></tr></tbody>';
+  }else h='<tbody><tr><td class="hint">填入 SEG 與化學品後，這裡會自動產生報價測點數。</td></tr></tbody>';
+  $('#finTbl').innerHTML=h;
   var rows=R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:(a.seg<b.seg?-1:1)});
-  var h='<thead><tr><th>項目</th><th>SEG／區域</th><th>人數</th><th>濃度（佔PEL）</th><th>級距</th><th>頻率</th><th class="num">現況</th><th class="num">新制</th><th class="num">增減</th><th>備註</th></tr></thead><tbody>';
+  var h2='<thead><tr><th>項目</th><th>SEG／區域</th><th>人數</th><th>濃度（佔PEL）</th><th>級距</th><th>頻率</th><th class="num">現況</th><th class="num">新制</th><th class="num">增減</th><th>備註</th></tr></thead><tbody>';
   rows.forEach(function(r){
-    var d=r.n-r.cur;var dc=r.skip?'':(d>0?'up':(d<0?'down':''));
-    h+='<tr'+(r.skip?' class="skip"':'')+'><td>'+esc(r.item)+'</td><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td class="num">'+(r.people||'')+'</td>'+
-    '<td>'+esc((r.nd?'<':'')+(r.conc===undefined?'':String(r.conc).replace(/^[<＜]/,''))+' '+r.unit)+'<br><span class="hint">'+fmtPct(r.ratio)+'</span></td>'+
-    '<td>'+esc(r.tier.label)+'</td><td>每 '+r.freq+' 個月</td><td class="num">'+r.cur+'</td><td class="num"><b>'+r.n+'</b></td><td class="num '+dc+'">'+(d>0?'+':'')+d+'</td><td>'+esc(r.notes.join('；'))+'</td></tr>';
+    var dd=r.n-r.cur;var dc=r.skip?'':(dd>0?'up':(dd<0?'down':''));
+    h2+='<tr'+(r.skip?' class="skip"':'')+'><td>'+esc(r.item)+'</td><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td class="num">'+(r.people||'')+'</td>'+
+    '<td>'+esc((r.nd?'<':'')+(r.conc===undefined?'':String(r.conc).replace(/^[<＜]/,''))+' '+r.unit)+'<br><span class="hint">'+fmtPct(r.ratio)+'・'+(r.src==='x95'?'X95':'單次')+'</span></td>'+
+    '<td>'+esc(r.tier.label)+'</td><td>每 '+r.freq+' 個月</td><td class="num">'+r.cur+'</td><td class="num"><b>'+r.n+'</b></td><td class="num '+dc+'">'+(dd>0?'+':'')+dd+'</td><td>'+esc(r.notes.join('；'))+'</td></tr>';
   });
-  h+='</tbody>';$('#resTbl').innerHTML=rows.length?h:'<tbody><tr><td class="hint">填入 SEG 與化學品後，這裡會自動產生結果。</td></tr></tbody>';
-  var ex=[];
-  if(S.nonLegal.length)ex.push('不納入（非法定監測項目）：'+S.nonLegal.join('、'));
-  if(S.phys.length)ex.push('不納入（物理性，不適用新制）：'+S.phys.join('、'));
-  $('#extraLine').textContent=ex.join('　');
-  var w=[];if(S.anyQuarterly)w.push('有項目達或超過 PEL，頻率改為每 3 個月，全年樣本數已依此計算。');
+  h2+='</tbody>';$('#resTbl').innerHTML=rows.length?h2:'';
+  var w=[];if(S.anyQuarterly)w.push('有項目達或超過 PEL，頻率改為每 3 個月。');
   if(R.rows.some(function(r){return r.ratio===null}))w.push('部分項目缺濃度或 PEL，暫以 6 個樣本計。');
   $('#warnLine').textContent=w.join(' ');
-  if(regen||!sayDirty)$('#say').value=makeSay(R);
-  window._R=R;
+  var ex=[];if(S.nonLegal.length)ex.push('維持現況（非法定）：'+S.nonLegal.map(function(x){return x}).join('、'));
+  if(S.phys.length)ex.push('維持現況（物理性）：'+S.phys.join('、'));
+  $('#extraLine').textContent=ex.join('　');
+  $('#forceSay').hidden=G.complete;
+  if(regen||!sayDirty){
+    if(!G.complete&&!forceSay)$('#say').value='資料尚未補齊，暫不產生客戶說明。\n請先依上方「缺漏清單」取得資料；若要先看暫估版，按「仍產生暫估版」。';
+    else $('#say').value=makeSay(R,G);
+  }
+  window._R=R;window._G=G;window._F=fr;
 }
-function makeSay(R){
-  var S=R.sum;if(!R.rows.length)return'';
+function makeSay(R,G){
+  var S=R.sum;if(!R.rows.length&&!R.keep.length)return'';
   var L=[];
+  if(G&&!G.complete)L.push('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】');
   L.push('【116.1.1 作業環境監測新制說明】');
   L.push('依勞動部 115.11.19 公告（勞職授字第 1150254044A 號），自 116 年 1 月 1 日起，化學性因子監測的樣本數與頻率，改依勞工人數及各相似暴露族群（SEG）的濃度級距認定，不再以單一測點代表。');
-  L.push((state.name?state.name:'貴廠')+'勞工 '+S.total+' 人（'+(S.big?'100 人以上':'未達 100 人')+'），依歷次監測結果分級後，每輪法定化學性監測樣本數由現行 '+S.cur+' 個調整為 '+S.n+' 個。');
+  L.push((state.name?state.name:'貴廠')+'勞工 '+(parseFloat(state.total)||0)+' 人（'+((parseFloat(state.total)||0)>=100?'100 人以上':'未達 100 人')+'），依歷次監測結果分級後，每輪監測點數由現行 '+S.cur+' 點調整為 '+S.final+' 點。');
   L.push('調整原因：');
   L.push('1. 採樣結果須能代表勞工個人暴露，採樣方式以個人採樣為原則。');
   L.push('2. 每個 SEG、每個監測項目須達公告規定的樣本數。');
-  if(!S.big)L.push('3. 同一類作業內相同項目，僅測濃度最高的 SEG，已為貴廠減少重複採樣。');
+  if(!(S.big))L.push('3. 同一類作業內相同項目，僅測濃度最高的 SEG，已為貴廠減少重複採樣。');
   else L.push('3. 濃度低於容許標準 1/10 的項目採最低樣本數；達 1/2 以上者樣本數增加。');
   var hi=R.rows.filter(function(r){return r.tier.key==='pel'&&!r.skip}).map(function(r){return r.seg+' '+r.item});
   if(hi.length)L.push('另 '+hi.join('、')+' 濃度達容許標準，依新制須每 3 個月監測一次。');
-  if(S.nonLegal.length)L.push('另 '+S.nonLegal.map(function(x){return x.replace(/（.*）/,'')}).filter(function(v,i,a){return a.indexOf(v)===i}).join('、')+' 非屬法定監測項目，不計入上述數量。');
+  var kp=R.keep.filter(function(k){return k.n>0}).map(function(k){return k.item});
+  kp=kp.filter(function(v,i,a){return a.indexOf(v)===i});
+  if(kp.length)L.push('另 '+kp.join('、')+' 非屬新制規範項目，維持原點數。');
   L.push('實際採樣規劃以公告原文及雙方確認之採樣策略為準。');
   return L.join('\n');
 }
 $('#say').oninput=function(){sayDirty=true};
 $('#regen').onclick=function(){sayDirty=false;update(true)};
+$('#forceSay').onclick=function(){forceSay=true;sayDirty=false;update(true)};
 function copyText(t,btn){
   function ok(){var o=btn.textContent;btn.textContent='已複製';setTimeout(function(){btn.textContent=o},1200)}
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,function(){fb()})}else fb();
@@ -463,11 +564,11 @@ function copyText(t,btn){
 }
 $('#copySay').onclick=function(){copyText($('#say').value,this)};
 $('#copyTbl').onclick=function(){
-  var R=window._R;if(!R)return;var L=[['項目','SEG','區域','人數','濃度','單位','佔PEL','級距','頻率(月)','現況','新制','備註'].join('\t')];
-  R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:(a.seg<b.seg?-1:1)}).forEach(function(r){
-    L.push([r.item,r.seg,r.segName,r.people,r.conc,r.unit,fmtPct(r.ratio),r.tier.label,r.freq,r.cur,r.n,r.notes.join('；')].join('\t'))});
-  L.push(['合計','','','','','','','','',R.sum.cur,R.sum.n,'全年約 '+Math.round(R.sum.year*10)/10+' 個'].join('\t'));
+  var R=window._R,F=window._F;if(!R)return;var L=[['SEG','區域','項目','測點','全年','備註'].join('\t')];
+  F.forEach(function(r){L.push([r.seg,r.segName,r.item,r.n,Math.round(r.n*(12/r.freq)*10)/10,r.note].join('\t'))});
+  L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,''].join('\t'));
   copyText(L.join('\n'),this)};
+$('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
 /* ---------- 匯入／匯出 ---------- */
 function syncTop(){$('#cname').value=state.name||'';$('#total').value=state.total||''}
@@ -484,7 +585,7 @@ function doImport(replace){
     var code=p[0];var g=map[code];
     if(!g){g={code:code,name:p[1],group:p[2],people:p[3],items:[]};map[code]=g;order.push(code)}
     if(g.items.length===1&&!g.items[0].name)g.items=[];
-    g.items.push({name:p[4],cur:p[5]===undefined||p[5]===''?1:p[5],conc:p[6]||'',unit:/^ppm$/i.test(p[7]||'')?'ppm':(/mg/i.test(p[7]||'')?'mg/m³':''),pel:''});cnt++;
+    g.items.push({name:p[4],cur:p[5]||'',conc:p[6]||'',src:/x95|統計|95/i.test(p[8]||'')?'x95':'single',unit:/^ppm$/i.test(p[7]||'')?'ppm':(/mg/i.test(p[7]||'')?'mg/m³':''),pel:''});cnt++;
   });
   state.segs=order.map(function(c){return map[c]});
   renderSegs();save();update(true);$('#impModal').classList.remove('show');$('#impText').value='';
@@ -539,13 +640,13 @@ if(MODE==='self'){
   $('#setMid').onchange=function(){SET.mid=parseInt(this.value,10);save();update(true)};
   $('#setTie').onchange=function(){SET.tie=this.value;save();update(true)};
   var ex=$('#loadEx');if(ex)ex.onclick=function(){
-    state={name:'歐利得材料科技高雄廠',total:'51',segs:[
-      {code:'SEG01',name:'A棟2F A1生產區',group:'生產區',people:'12',items:[['丙酮',1,'<0.572'],['乙酸異丙酯',1,'<0.173'],['甲醇',1,'<0.760'],['硫酸',1,'0.197','mg/m³'],['氨',1,'0.0222']]},
-      {code:'SEG02',name:'A棟2F A2生產區',group:'生產區',people:'8',items:[['乙酸異丙酯',1,'<0.173'],['甲苯',1,'<0.387'],['硫酸',1,'0.348','mg/m³']]},
-      {code:'SEG03',name:'A棟2F A3生產區',group:'生產區',people:'8',items:[['異丙醇',1,'<0.332'],['乙酸異丙酯',1,'<0.171'],['甲苯',1,'1.06'],['硫酸',1,'<0.0524','mg/m³']]},
+    state={name:'範例工廠',total:'51',segs:[
+      {code:'SEG01',name:'A區生產區',group:'生產區',people:'12',items:[['丙酮',1,'<0.572'],['乙酸異丙酯',1,'<0.173'],['甲醇',1,'<0.760'],['硫酸',1,'0.197','mg/m³'],['氨',1,'0.0222']]},
+      {code:'SEG02',name:'B區生產區',group:'生產區',people:'8',items:[['乙酸異丙酯',1,'<0.173'],['甲苯',1,'<0.387'],['硫酸',1,'0.348','mg/m³']]},
+      {code:'SEG03',name:'C區生產區',group:'生產區',people:'8',items:[['異丙醇',1,'<0.332'],['乙酸異丙酯',1,'<0.171'],['甲苯',1,'1.06'],['硫酸',1,'<0.0524','mg/m³']]},
       {code:'SEG04',name:'品保室',group:'品保室',people:'4',items:[['丙酮',1,'<0.577'],['異丙醇',1,'<0.324'],['甲苯',1,'<0.399'],['甲醇',1,'<0.797'],['硫酸',1,'<0.0502','mg/m³']]},
-      {code:'SEG05',name:'A棟2F 氨氣瓶區',group:'氨氣瓶區',people:'2',items:[['氨',1,'0.156']]}
-    ].map(function(g){if(Array.isArray(g.items[0])){g.items=g.items.map(function(a){return{name:a[0],cur:a[1],conc:a[2],unit:a[3]||'',pel:''}})}return g})};
+      {code:'SEG05',name:'氣瓶區',group:'氨氣瓶區',people:'2',items:[['氨',1,'0.156']]}
+    ].map(function(g){if(Array.isArray(g.items[0])){g.items=g.items.map(function(a){return{name:a[0],cur:a[1],conc:a[2],src:'single',unit:a[3]||'',pel:''}})}return g})};
     syncTop();renderSegs();save();update(true)};
 }
 
