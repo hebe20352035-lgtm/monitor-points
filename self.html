@@ -601,20 +601,17 @@ function makeSay(R,G){
   var S=R.sum;if(!R.rows.length&&!R.keep.length)return'';
   var L=[];
   if(G&&!G.complete)L.push('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】');
-  L.push('【116.1.1 作業環境監測新制說明】');
-  L.push('依勞動部 115.11.19 公告（勞職授字第 1150254044A 號），自 116 年 1 月 1 日起，化學性因子監測的樣本數與頻率，改依勞工人數及各相似暴露族群（SEG）的濃度級距認定，不再以單一測點代表。');
-  L.push((state.name?state.name:'貴廠')+'勞工 '+(parseFloat(state.total)||0)+' 人（'+((parseFloat(state.total)||0)>=100?'100 人以上':'未達 100 人')+'），依歷次監測結果分級後，每輪監測點數由現行 '+S.cur+' 點調整為 '+S.final+' 點。');
-  L.push('調整原因：');
-  L.push('1. 採樣結果須能代表勞工個人暴露，採樣方式以個人採樣為原則。');
-  L.push('2. 每個 SEG、每個監測項目須達公告規定的樣本數。');
-  if(!(S.big))L.push('3. 同一類作業內相同項目，僅測濃度最高的 SEG，已為貴廠減少重複採樣。');
-  else L.push('3. 濃度低於容許標準 1/10 的項目採最低樣本數；達 1/2 以上者樣本數增加。');
+  var nm='貴廠',d=S.final-S.cur;
+  L.push('您好，勞動部的新修法從 116 年 1 月 1 日開始上路，作業環境監測的樣本數要改依勞工人數和各區濃度級距重新計算，所以這次'+(d>0?'點數會比以往多一些，這是法規調整，不是我們額外加價。':'點數會依新制重新核算。'));
+  L.push('我們已經依'+nm+'歷次的監測結果逐項評估，用法規允許的最少點數來報價，每輪監測由現行 '+S.cur+' 點調整為 '+S.final+' 點。');
+  if(S.big)L.push('濃度偏低的項目，我們都以最低樣本數處理，只有濃度較高的項目才需要加點。');
+  else L.push('同一類作業的相同項目，法規允許只測濃度最高的那一區，這部分我們也幫您併在一起，省掉重複採樣。');
   var hi=R.rows.filter(function(r){return r.tier.key==='pel'&&!r.skip}).map(function(r){return r.seg+' '+r.item});
-  if(hi.length)L.push('另 '+hi.join('、')+' 濃度達容許標準，依新制須每 3 個月監測一次。');
+  if(hi.length)L.push('另外 '+hi.join('、')+' 的濃度已達容許標準，依新制要每 3 個月監測一次，這部分會比較有感，也建議一起評估改善。');
   var kp=R.keep.filter(function(k){return k.n>0}).map(function(k){return k.item});
   kp=kp.filter(function(v,i,a){return a.indexOf(v)===i});
-  if(kp.length)L.push('另 '+kp.join('、')+' 非屬新制規範項目，維持原點數。');
-  L.push('實際採樣規劃以公告原文及雙方確認之採樣策略為準。');
+  if(kp.length)L.push(kp.join('、')+' 不在新制規範內，點數維持不變。');
+  L.push('實際採樣內容我們會再跟您確認，有任何疑問都歡迎隨時跟我們說。');
   return L.join('\n');
 }
 $('#say').oninput=function(){sayDirty=true};
