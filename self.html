@@ -83,12 +83,18 @@ details.more{position:relative}details.more summary{list-style:none;display:inli
 .total{display:flex;gap:22px;flex-wrap:wrap;margin:6px 0 4px}.total div{display:flex;flex-direction:column}.total b{font-size:34px;line-height:1.1;color:var(--accent)}.total span{font-size:12px;color:var(--ink2)}
 details.fold{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}details.fold summary{cursor:pointer;color:var(--ink2);font-size:13px}
 table.res.fin{min-width:420px}table.res.fin td.big{font-size:16px;font-weight:700;text-align:center}
+input.bad,select.bad{border-color:#C0392B!important;background:#FDECEA!important}
+.fn{display:block;font-size:11px;color:#C0392B;line-height:1.3;margin-top:2px}.fn.soft{color:var(--ink3)}
+.fn button{border:1px solid #C0392B;background:#fff;color:#C0392B;border-radius:6px;font-size:11px;padding:0 6px;margin-left:4px;cursor:pointer}
+.steps{display:flex;gap:6px;margin:10px 0 0;flex-wrap:wrap}.stp{flex:1 1 90px;text-align:center;font-size:13px;border:1px solid var(--line);border-radius:8px;padding:6px 4px;color:var(--ink2);background:#fff}
+.stp.done{border-color:var(--accent);color:var(--accent)}.stp.warn{border-color:#C0392B;color:#C0392B;background:#FDECEA;font-weight:700}
+.btn.big{width:100%;font-size:17px;padding:14px;margin-top:10px}
 tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)}
 </style>
 </head>
 <body>
 <header>
-  <div class="hrow"><h1>監測點數規劃</h1><span class="ver">自用版　依勞動部 115.11.19 公告（116.1.1 施行）</span></div>
+  <div class="hrow"><h1>監測點數規劃</h1><span class="ver">自用版</span></div>
   <nav id="tabs">
     <button data-t="plan" class="on">規劃</button>
     <button data-t="chem">化學品查詢</button>
@@ -103,8 +109,10 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
       <label class="f" style="width:120px;flex:none">全廠勞工人數<input id="total" type="number" inputmode="numeric" min="0" placeholder="51"></label>
       <span id="bigBadge" class="badge" style="align-self:flex-end;margin-bottom:6px">—</span>
     </div>
+    <button class="btn pri big" id="docBtn">匯入計畫書（.docx）</button><input type="file" id="docFile" accept=".docx" hidden>
+    <div class="steps"><span class="stp" id="st1">① 匯入</span><span class="stp" id="st2">② 改標紅處</span><span class="stp" id="st3">③ 看報價</span></div>
     <div class="row" style="margin-top:10px">
-      <button class="btn pri sm" id="addSeg">＋ 新增 SEG</button>
+      <button class="btn sm" id="addSeg">＋ SEG</button>
       <button class="btn sm" id="openImp">貼上匯入</button>
       <details class="more"><summary class="btn sm">更多 ▾</summary><div class="morebox">
         <button class="btn sm" id="exp">匯出檔案</button>
@@ -114,8 +122,8 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
         <button class="btn sm del" id="clearAll">清空</button>
       </div></details>
     </div>
-    <details class="fold"><summary>填寫說明</summary><div class="hint" style="margin-top:6px">資料來源：<b>工廠基本資料</b>（全廠人數）、<b>表三</b>（SEG、區域、人數、化學品）、<b>採樣策略彙整表</b>（現況點數）、<b>歷年統計表</b>（X95）。缺任何一項會進入防呆模式。同一「作業組別」名稱寫一樣＝同類作業。非法定化學品、噪音等物理性、二氧化碳不套新制，維持現況點數，仍計入報價總數。</div></details>
   </div>
+  <div id="impReport"></div>
   <div id="segs"></div>
 
   <div id="resultBox">
@@ -186,7 +194,7 @@ var CHEMS = [{"z":"乙醛","a":[],"c":"75-07-0","e":"Acetaldehyde","p":"附表�
 var MODE = "self";
 /* 規則計算核心（純函式，不碰 DOM） */
 var DEFAULTS = { proviso: true, mid: 3, tie: 'fewest' };
-var PHYS = /噪音|高溫|綜合溫度熱指數|振動|WBGT/i;
+var PHYS = /噪音|高溫|綜合溫度熱指數|振動|WBGT|照度|照明/i;
 
 function parseConc(s) {
   if (s === null || s === undefined) return { v: NaN, nd: false };
@@ -402,14 +410,19 @@ function newSeg(n){return{code:'SEG'+String(n).padStart(2,'0'),name:'',group:'',
 (function(){var h='';CH.forEach(function(c){h+='<option value="'+esc(c.z)+'">'+esc(c.c)+'</option>'});$('#chemlist').innerHTML=h})();
 
 /* ---------- SEG 卡片 ---------- */
+function flagNote(g,k){
+  var f=g.flag&&g.flag[k];if(!f)return'';
+  if(f.soft)return'<span class="fn soft">採樣策略表：'+esc(f.other)+'</span>';
+  return'<span class="fn">'+(k==='name'?'採樣策略表寫「'+esc(f.other)+'」':'採樣策略表寫 '+esc(f.other)+' 人')+'<button data-act="okFlag" data-k="'+k+'">確認無誤</button></span>';
+}
 function renderSegs(){
   var h='';
   state.segs.forEach(function(g,gi){
     h+='<div class="seg" data-g="'+gi+'"><div class="seghead">'+
     '<label class="f">SEG 代號<input data-f="code" value="'+esc(g.code)+'"></label>'+
-    '<label class="f">區域／部門<input data-f="name" value="'+esc(g.name)+'"></label>'+
+    '<label class="f">區域／部門<input data-f="name" class="'+((g.flag&&g.flag.name&&!g.flag.name.soft)?'bad':'')+'" value="'+esc(g.name)+'">'+flagNote(g,'name')+'</label>'+
     '<label class="f">作業組別<input data-f="group" value="'+esc(g.group)+'" placeholder="同類作業寫一樣"></label>'+
-    '<label class="f">人數<input data-f="people" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'"></label>'+
+    '<label class="f">人數<input data-f="people" class="'+((g.flag&&g.flag.people)?'bad':'')+'" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'">'+flagNote(g,'people')+'</label>'+
     '<button class="btn sm del" data-act="delSeg">刪除 SEG</button></div>'+
     '<div class="items"><table><thead><tr><th style="width:22%">化學品（表三）</th><th style="width:8%">現況點數<br><span class="hint">採樣策略表</span></th><th style="width:14%">濃度</th><th style="width:11%">濃度來源</th><th class="adv-col" style="width:11%">單位</th><th class="adv-col" style="width:11%">PEL</th><th>佔PEL／狀態</th><th></th></tr></thead><tbody>';
     g.items.forEach(function(it,ii){h+=itemRow(g,it,gi,ii)});
@@ -437,8 +450,8 @@ function itemStatus(it){
 function itemRow(g,it,gi,ii){
   var inf=itemInfo(it);var ph=isNaN(inf.pel)?'':inf.pel;
   return'<tr data-i="'+ii+'">'+
-  '<td><input data-f="name" list="chemlist" value="'+esc(it.name)+'" placeholder="中文名或 CAS"></td>'+
-  '<td><input data-f="cur" type="number" inputmode="numeric" min="0" value="'+esc(it.cur)+'"></td>'+
+  '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+'</td>'+
+  '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
   '<td><input data-f="conc" value="'+esc(it.conc)+'" placeholder="X95 或 <0.76"></td>'+
   '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>'+
   '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
@@ -451,15 +464,18 @@ $('#segs').addEventListener('input',function(e){
   var gEl=t.closest('.seg');var g=state.segs[+gEl.dataset.g];
   var tr=t.closest('tr');
   if(tr){var it=g.items[+tr.dataset.i];it[f]=t.value;
+    if(it.flag&&it.flag===f){delete it.flag;t.classList.remove('bad');var fn0=t.parentNode.querySelector('.fn');if(fn0)fn0.remove()}
     tr.querySelector('.st').innerHTML=itemStatus(it);
     if(f==='unit'||f==='name'){var inf=itemInfo(it);var pelI=tr.querySelector('[data-f=pel]');pelI.placeholder=isNaN(inf.pel)?'':inf.pel;
       var us=tr.querySelector('[data-f=unit]');us.options[0].text='自動('+inf.unit+')';}
-  }else{g[f]=t.value}
+  }else{g[f]=t.value;
+    if(g.flag&&g.flag[f]&&!g.flag[f].soft){delete g.flag[f];t.classList.remove('bad');var fn1=t.parentNode.querySelector('.fn');if(fn1)fn1.remove()}}
   save();update(false);
 });
 $('#segs').addEventListener('click',function(e){
   var b=e.target.closest('[data-act]');if(!b)return;
   var gEl=b.closest('.seg');var g=state.segs[+gEl.dataset.g];
+  if(b.dataset.act==='okFlag'){delete g.flag[b.dataset.k];renderSegs();save();update(true);return}
   if(b.dataset.act==='delSeg'){if(confirm('刪除 '+g.code+'？')){state.segs.splice(+gEl.dataset.g,1);renderSegs()}}
   else if(b.dataset.act==='addItem'){g.items.push(newItem());renderSegs()}
   else if(b.dataset.act==='delItem'){var i=+b.closest('tr').dataset.i;g.items.splice(i,1);if(!g.items.length)g.items.push(newItem());renderSegs()}
@@ -476,14 +492,14 @@ function fmtPct(r){return r===null?'—':(r*100<0.01?'<0.01':(r*100).toFixed(r*1
 function renderGuard(G){
   var el=$('#guard');
   if(G.complete){el.innerHTML='<div class="hint" style="margin:0 0 10px;color:#2E7D4F">✓ 資料完整</div>';return}
-  var L=[['basic','工廠基本資料'],['t3','表三　相似暴露族群及暴露危害物質彙整表'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（第95百分位 X95）'],['other','其他需確認']];
+  var L=[['confirm','需二次確認（兩張表不一致）'],['basic','工廠基本資料'],['t3','表三　相似暴露族群及暴露危害物質彙整表'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（第95百分位 X95）'],['other','其他需確認']];
   var h='<div class="card" style="border-color:var(--warm);background:#FFF8EF"><div class="row" style="justify-content:space-between"><b style="color:var(--warm)">資料不齊，下方為暫估（'+G.count+' 項待補）</b><button class="btn sm" id="copyMiss">複製缺漏清單</button></div>';
   L.forEach(function(x){var a=G.issues[x[0]];if(a.length){h+='<div class="note"><b>'+x[1]+'</b><ul style="margin:4px 0 0 18px;padding:0">'+a.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>'}});
   el.innerHTML=h+'</div>';
   $('#copyMiss').onclick=function(){copyText(missText(G),this)};
 }
 function missText(G){
-  var L=[['basic','工廠基本資料'],['t3','表三（相似暴露族群及暴露危害物質彙整表）'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（含第95百分位）'],['other','其他需確認']];
+  var L=[['confirm','需二次確認（兩張表不一致）'],['basic','工廠基本資料'],['t3','表三（相似暴露族群及暴露危害物質彙整表）'],['t9','作業環境監測計畫採樣策略彙整表'],['stat','歷年統計表（含第95百分位）'],['other','其他需確認']];
   var s=['【資料缺漏清單】'+(state.name||'（客戶名稱未填）'),'為評估 116.1.1 新制測點數，尚缺下列資料，請補齊：'];var k=1;
   L.forEach(function(x){var a=G.issues[x[0]];if(a.length){s.push(k+'. '+x[1]);a.forEach(function(t){s.push('   - '+t)});k++}});
   return s.join('\n');
@@ -500,10 +516,19 @@ function update(regen){
   var big=(parseFloat(state.total)||0)>=100;
   var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
   var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
+  var cf=[];state.segs.forEach(function(g){
+    if(g.flag&&g.flag.name&&!g.flag.name.soft)cf.push(g.code+' 場所名稱：彙整表「'+g.name+'」，採樣策略表「'+g.flag.name.other+'」');
+    if(g.flag&&g.flag.people)cf.push(g.code+' 人數：彙整表 '+g.people+'，採樣策略表 '+g.flag.people.other);
+    (g.items||[]).forEach(function(i){if(i.flag==='name')cf.push(g.code+' '+i.name+'：只在採樣策略表，彙整表沒有')});
+  });
+  G.issues.confirm=cf;G.count+=cf.length;if(cf.length)G.complete=false;
+  var hasSeg=state.segs.some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})});
+  var nred=cf.length+state.segs.reduce(function(a,g){return a+(g.items||[]).filter(function(i){return i.flag==='cur'}).length},0);
+  $('#st1').className='stp'+(hasSeg?' done':'');$('#st2').className='stp'+(nred?' warn':(hasSeg?' done':''));$('#st2').textContent='② 改標紅處'+(nred?'（'+nred+'）':'');$('#st3').className='stp'+(hasSeg&&G.complete?' done':'');
   renderGuard(G);
   $('#sNew').textContent=S.final;$('#sYear').textContent=Math.round(S.finalYear*10)/10;$('#s3Year').textContent=Math.round(S.finalYear*30)/10;
   var d=S.final-S.cur;
-  $('#sNewLb').textContent=(G.complete?'':'暫估・')+'現況 '+S.cur+' 點 → 調整後 '+S.final+' 點（'+(d>0?'+':'')+d+'）。全年以每 6 個月一次、達 PEL 者每 3 個月一次計。';
+  $('#sNewLb').textContent=(G.complete?'':'暫估・')+'現況 '+S.cur+' → '+S.final+'（'+(d>0?'+':'')+d+'）';
   var fr=finRows(R);var h='';
   if(fr.length){
     h='<thead><tr><th>SEG／區域</th><th>項目</th><th>測點</th><th>全年</th><th>三年</th><th>備註</th></tr></thead><tbody>';
@@ -590,7 +615,7 @@ $('#impClose').onclick=function(){$('#impModal').classList.remove('show')};
 function doImport(replace){
   var lines=$('#impText').value.split(/\r?\n/).map(function(s){return s.trim()}).filter(Boolean);
   var map={};var order=[];
-  if(!replace){state.segs.forEach(function(g){map[g.code]=g;order.push(g.code)})}
+  if(!replace){state.segs.forEach(function(g){var blank=!(g.name||g.group||g.people)&&!(g.items||[]).some(function(i){return i.name});if(blank)return;map[g.code]=g;order.push(g.code)})}
   var cnt=0;
   lines.forEach(function(ln){
     var p=ln.indexOf('\t')>=0?ln.split('\t'):ln.split(/[,，]|\s{2,}/);p=p.map(function(s){return s.trim()});
@@ -604,6 +629,144 @@ function doImport(replace){
   renderSegs();save();update(true);$('#impModal').classList.remove('show');$('#impText').value='';
 }
 $('#impGo').onclick=function(){doImport(false)};$('#impGo2').onclick=function(){doImport(true)};
+
+/* ---------- 匯入計畫書 (.docx) ---------- */
+var W_NS='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+function u16(b,o){return b[o]|(b[o+1]<<8)}function u32(b,o){return(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0}
+async function unzipEntry(buf,want){
+  var b=new Uint8Array(buf),i=b.length-22;
+  while(i>=0&&u32(b,i)!==0x06054b50)i--;
+  if(i<0)throw new Error('不是有效的 docx');
+  var n=u16(b,i+10),off=u32(b,i+16);
+  for(var k=0;k<n;k++){
+    var nl=u16(b,off+28),el=u16(b,off+30),cl=u16(b,off+32),method=u16(b,off+10),csz=u32(b,off+20),lho=u32(b,off+42);
+    var name=new TextDecoder().decode(b.subarray(off+46,off+46+nl));
+    if(name===want){
+      var ln=u16(b,lho+26),le=u16(b,lho+28),ds=lho+30+ln+le,data=b.subarray(ds,ds+csz);
+      if(method===0)return new TextDecoder().decode(data);
+      var ds2=new DecompressionStream('deflate-raw');var w=ds2.writable.getWriter();w.write(data);w.close();
+      var ab=await new Response(ds2.readable).arrayBuffer();return new TextDecoder().decode(ab);
+    }
+    off+=46+nl+el+cl;
+  }
+  throw new Error('找不到 '+want);
+}
+function normT(s){return String(s||'').replace(/[\s　]+/g,'').replace(/[（）]/g,function(c){return c==='（'?'(':')'})}
+function pText(p){var s='';var ts=p.getElementsByTagNameNS(W_NS,'t');for(var i=0;i<ts.length;i++)s+=ts[i].textContent;return s}
+function tblGrid(tbl){
+  var rows=[];var trs=[];for(var c=tbl.firstChild;c;c=c.nextSibling)if(c.localName==='tr')trs.push(c);
+  trs.forEach(function(tr,ri){
+    var row=[];var gc=0;
+    for(var c=tr.firstChild;c;c=c.nextSibling){
+      if(c.localName!=='tc')continue;
+      var pr=null;for(var x=c.firstChild;x;x=x.nextSibling)if(x.localName==='tcPr')pr=x;
+      var span=1,vm=false;
+      if(pr)for(var y=pr.firstChild;y;y=y.nextSibling){
+        if(y.localName==='gridSpan')span=parseInt(y.getAttributeNS(W_NS,'val'))||1;
+        if(y.localName==='vMerge'){vm=(y.getAttributeNS(W_NS,'val')!=='restart')}
+      }
+      var txt=[];for(var q=c.firstChild;q;q=q.nextSibling)if(q.localName==='p'){var tt=pText(q).trim();if(tt)txt.push(tt)}
+      var text=txt.join('\n');
+      if(vm&&ri>0&&rows[ri-1])text=rows[ri-1][gc]||'';
+      for(var s=0;s<span;s++){row[gc+s]=text}
+      gc+=span;
+    }
+    rows.push(row);
+  });
+  return rows;
+}
+function hdrIdx(g){for(var i=0;i<g.length;i++){var d={};g[i].forEach(function(c){if(c)d[c]=1});if(Object.keys(d).length>=3)return i}return 0}
+function findCol(hdr,res){for(var i=0;i<hdr.length;i++){var h=normT(hdr[i]);for(var j=0;j<res.length;j++)if(res[j].test(h))return i}return -1}
+async function parseDocx(file){
+  var xml=await unzipEntry(await file.arrayBuffer(),'word/document.xml');
+  var doc=new DOMParser().parseFromString(xml,'application/xml');
+  var body=doc.getElementsByTagNameNS(W_NS,'body')[0];
+  var blocks=[];var prevP=[];
+  for(var el=body.firstChild;el;el=el.nextSibling){
+    if(el.localName==='p'){var t=pText(el).trim();if(t){prevP.push(t);if(prevP.length>3)prevP.shift()}}
+    else if(el.localName==='tbl'){var gg=tblGrid(el);var hi=hdrIdx(gg);var pv=prevP.slice();for(var q=0;q<hi;q++)pv.push(gg[q].join(''));blocks.push({grid:gg,hi:hi,prev:pv});prevP=[]}
+  }
+  var res={name:'',total:'',segs:[],notes:[],ok:[],stat:null};
+  function titleNear(b,re){return b.prev.some(function(p){return re.test(normT(p))})}
+  var basic=null,t3=null,t9=null,stat=null;
+  blocks.forEach(function(b){
+    var all=normT(b.grid.map(function(r){return r.join('|')}).join('|'));
+    var h=b.grid[b.hi]?normT(b.grid[b.hi].join('|')):'';
+    if(!t9&&(titleNear(b,/作業環境監測計畫採樣策略彙整表/)||(/採樣點數|採樣方式/.test(h)&&/暴露危害物質/.test(h))))t9=b;
+    else if(!t3&&(titleNear(b,/相似暴露族群及暴露危害物質彙整表/)||(/暴露危害物質/.test(h)&&/SEG|相似暴露/.test(h)&&/部門|作業人數/.test(h))))t3=b;
+    else if(!basic&&(titleNear(b,/工廠基本資料/)||/工廠名稱/.test(all)&&/員工人數/.test(all)))basic=b;
+    else if(!stat&&(/統計表|95百分位|X95/i.test(b.prev.map(normT).join('')+h))&&/SEG/.test(all))stat=b;
+  });
+  if(basic){basic.grid.forEach(function(r){r.forEach(function(c,i){var k=normT(c);if(/^工廠名稱/.test(k)&&r[i+1]&&!res.name)res.name=r[i+1].replace(/\n/g,' ').trim();if(/^員工人數|^勞工人數|^全廠人數/.test(k)&&r[i+1]&&!res.total){var m=String(r[i+1]).match(/\d+/);if(m)res.total=m[0]}})});
+    res.ok.push('工廠基本資料：'+(res.name||'（未找到名稱）')+'，員工 '+(res.total||'?')+' 人')}
+  else res.notes.push('找不到「工廠基本資料」');
+  var segs={},order=[];
+  function segOf(code,name,dept,people){if(!segs[code]){segs[code]={code:code,name:name||'',group:'',dept:dept||'',people:people||'',items:[],_i:{}};order.push(code)}return segs[code]}
+  if(t3){
+    var g=t3.grid,hd=g[t3.hi];var cc=findCol(hd,[/SEG|相似暴露族群\(?代號/]),cn=findCol(hd,[/作業場所/]),cp=findCol(hd,[/作業人數|人數/]),ci=findCol(hd,[/暴露危害物質/]),cd=findCol(hd,[/部門/]);
+    if(cc<0)cc=hd.length-1;
+    var cnt=0;
+    for(var r=t3.hi+1;r<g.length;r++){
+      var row=g[r];var code=normT(row[cc]).match(/SEG\d+/i);if(!code)continue;code=code[0].toUpperCase();
+      var s=segOf(code,(row[cn]||'').replace(/\n/g,''),row[cd]||'',(String(row[cp]||'').match(/\d+/)||[''])[0]);
+      s.group=s.dept;
+      String(row[ci]||'').replace(/\n/g,'').split(/[、，,]/).forEach(function(nm){nm=nm.trim();if(!nm)return;if(!s._i[nm]){s._i[nm]={name:nm,cur:'',conc:'',src:'single',unit:'',pel:'',_t3:true};s.items.push(s._i[nm])}});
+      cnt++;
+    }
+    res.ok.push('相似暴露族群及暴露危害物質彙整表：'+cnt+' 個 SEG');
+  }else res.notes.push('找不到「相似暴露族群及暴露危害物質彙整表」');
+  var allItems=[];
+  if(t9){
+    var g9=t9.grid,h9=g9[t9.hi];var c9s=findCol(h9,[/SEG|相似暴露族群\(?代號/]),c9n=findCol(h9,[/作業場所/]),c9p=findCol(h9,[/人數/]),c9i=findCol(h9,[/暴露危害物質|採樣點數/]);
+    if(c9s<0)c9s=h9.length-1;
+    var c9=0;
+    for(var r2=t9.hi+1;r2<g9.length;r2++){
+      var rw=g9[r2];var cs=normT(rw[c9s]);var m=cs.match(/SEG\d+/i);var code2=m?m[0].toUpperCase():'全廠';
+      var place=(rw[c9n]||'').replace(/\n/g,'');
+      var s2;
+      if(code2==='全廠'){s2=segOf('全廠',place||'全廠區','','')}
+      else{s2=segs[code2];if(!s2){s2=segOf(code2,place,'',(String(rw[c9p]||'').match(/\d+/)||[''])[0]);res.notes.push(code2+' 只出現在採樣策略表，不在彙整表中')}
+        else{var pp=(String(rw[c9p]||'').match(/\d+/)||[''])[0];if(pp&&s2.people&&pp!==s2.people&&!(s2.flag&&s2.flag.people)){(s2.flag=s2.flag||{}).people={other:pp}}
+          var pn=normT(place);if(place&&s2.name&&normT(s2.name)!==pn&&!(s2.flag&&s2.flag.name)){var a1=normT(s2.name);(s2.flag=s2.flag||{}).name={other:place,soft:(a1.indexOf(pn)>=0||pn.indexOf(a1)>=0)}}}}
+      String(rw[c9i]||'').replace(/\n/g,'').split(/[、，]/).forEach(function(part){
+        var mm=part.trim().match(/^(.+?)[\(（]\s*(\d+(?:\.\d+)?)\s*[\)）]$/);if(!mm)return;
+        var nm=mm[1].trim(),n=mm[2];
+        var it=s2._i[nm];
+        if(!it){it={name:nm,cur:'',conc:'',src:'single',unit:'',pel:''};s2._i[nm]=it;s2.items.push(it);
+          var gen=s2.items.filter(function(x){return x._t3&&x.cur===''&&x!==it&&(nm.indexOf(x.name)>=0||nm.replace(/總|可呼吸性/g,'')===x.name)})[0];
+          if(gen){gen._cover=true}else if(code2!=='全廠'){it.flag='name'}}
+        it.cur=String((parseFloat(it.cur)||0)+parseFloat(n));c9++;
+      });
+    }
+    res.ok.push('採樣策略彙整表：'+c9+' 筆項目點數');
+  }else res.notes.push('找不到「作業環境監測計畫採樣策略彙整表」');
+  order.forEach(function(c){var s=segs[c];s.items=s.items.filter(function(it){return !it._cover});s.items.forEach(function(it){if(it._t3&&it.cur===''&&c!=='全廠')it.flag='cur'})});
+  if(stat){res.ok.push('歷年統計表：已找到，但欄位格式未確認，濃度請手動確認');res.stat=true}
+  else res.notes.push('找不到歷年統計表（X95），濃度需另外提供');
+  res.segs=order.map(function(c){var s=segs[c];return{code:s.code,name:s.name,group:s.group||s.name,people:s.people,flag:s.flag,items:s.items.map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.flag)o.flag=i.flag;return o})}});
+  res.groups=order.filter(function(c){return c!=='全廠'}).map(function(c){return c+'→'+(segs[c].dept||segs[c].name)});
+  return res;
+}
+function showReport(r,fname){
+  var h='<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>已讀取</b><button class="btn sm" id="repClose">關閉</button></div>';
+  h+='<div class="hint">'+esc(fname)+'</div><ul style="margin:6px 0 0 18px;padding:0">'+r.ok.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul>';
+  if(r.notes.length)h+='<div class="note" style="color:#C0392B"><ul style="margin:0 0 0 18px;padding:0">'+r.notes.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>';
+  h+='<div class="hint">作業組別預設＝部門名稱，同類作業才寫一樣。</div></div>';
+  $('#impReport').innerHTML=h;$('#repClose').onclick=function(){$('#impReport').innerHTML=''};
+}
+$('#docBtn').onclick=function(){$('#docFile').click()};
+$('#docFile').onchange=async function(){
+  var f=this.files[0];this.value='';if(!f)return;
+  if(/\.doc$/i.test(f.name)){alert('這是舊版 .doc 格式，網頁讀不了。\n請用 Word 開啟後「另存新檔」成 .docx 再匯入。');return}
+  try{
+    var r=await parseDocx(f);
+    if(!r.segs.length){alert('讀不到 SEG 資料，請確認是否為作業環境監測計畫書。');return}
+    if((state.segs||[]).some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})})&&!confirm('目前已有資料，匯入會覆蓋，確定嗎？'))return;
+    state={name:r.name,total:r.total,segs:r.segs};
+    syncTop();renderSegs();save();update(true);showReport(r,f.name);
+  }catch(e){alert('讀取失敗：'+e.message+'\n若是 .doc 請先另存成 .docx')}
+};
+
 $('#exp').onclick=function(){
   var b=new Blob([JSON.stringify({state:state,SET:SET})],{type:'application/json'});var a=document.createElement('a');
   a.href=URL.createObjectURL(b);a.download=(state.name||'監測點數')+'.json';document.body.appendChild(a);a.click();a.remove()};
