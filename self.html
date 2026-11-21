@@ -109,7 +109,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
       <label class="f" style="width:120px;flex:none">全廠勞工人數<input id="total" type="number" inputmode="numeric" min="0" placeholder="51"></label>
       <span id="bigBadge" class="badge" style="align-self:flex-end;margin-bottom:6px">—</span>
     </div>
-    <button class="btn pri big" id="docBtn">匯入計畫書（.docx）</button><input type="file" id="docFile" accept=".docx" hidden>
+    <button class="btn pri big" id="docBtn">匯入計畫書（Word）</button><input type="file" id="docFile" accept=".doc,.docx" hidden>
     <div class="steps"><span class="stp" id="st1">① 匯入</span><span class="stp" id="st2">② 改標紅處</span><span class="stp" id="st3">③ 看報價</span></div>
     <div class="row" style="margin-top:10px">
       <button class="btn sm" id="addSeg">＋ SEG</button>
@@ -677,15 +677,96 @@ function tblGrid(tbl){
 }
 function hdrIdx(g){for(var i=0;i<g.length;i++){var d={};g[i].forEach(function(c){if(c)d[c]=1});if(Object.keys(d).length>=3)return i}return 0}
 function findCol(hdr,res){for(var i=0;i<hdr.length;i++){var h=normT(hdr[i]);for(var j=0;j<res.length;j++)if(res[j].test(h))return i}return -1}
-async function parseDocx(file){
-  var xml=await unzipEntry(await file.arrayBuffer(),'word/document.xml');
+function docBlocks(buf){
+  var b=new Uint8Array(buf);
+  function r16(o){return b[o]|(b[o+1]<<8)}function r32(o){return(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0}
+  if(r32(0)!==0xE011CFD0)throw new Error('不是 Word 檔');
+  var ss=1<<r16(0x1E),ms=1<<r16(0x20),nfat=r32(0x2C),dir0=r32(0x30),cut=r32(0x38),mf0=r32(0x3C),nmf=r32(0x40),dif0=r32(0x44),ndif=r32(0x48);
+  function sec(i){return 512+i*ss}
+  var fatSecs=[];for(var i=0;i<109&&fatSecs.length<nfat;i++){var v=r32(0x4C+i*4);if(v<0xFFFFFFFA)fatSecs.push(v)}
+  var ds=dif0;for(var k=0;k<ndif&&ds<0xFFFFFFFA;k++){var o=sec(ds);for(var j=0;j<ss/4-1;j++){var v2=r32(o+j*4);if(v2<0xFFFFFFFA&&fatSecs.length<nfat)fatSecs.push(v2)}ds=r32(o+ss-4)}
+  var fat=[];fatSecs.forEach(function(s){var o=sec(s);for(var j=0;j<ss/4;j++)fat.push(r32(o+j*4))});
+  function chain(s){var out=[];while(s<0xFFFFFFFA&&out.length<1e6){out.push(s);s=fat[s]}return out}
+  function readBig(s,size){var out=new Uint8Array(size),p=0;chain(s).forEach(function(x){var n=Math.min(ss,size-p);if(n>0){out.set(b.subarray(sec(x),sec(x)+n),p);p+=n}});return out}
+  var dirB=readBig(dir0,chain(dir0).length*ss);var ents={};
+  for(var e=0;e<dirB.length;e+=128){var nl=dirB[e+64]|(dirB[e+65]<<8);if(!nl)continue;var nm='';for(var q=0;q<nl-2;q+=2)nm+=String.fromCharCode(dirB[e+q]|(dirB[e+q+1]<<8));
+    ents[nm]={s:(dirB[e+116]|(dirB[e+117]<<8)|(dirB[e+118]<<16)|(dirB[e+119]<<24))>>>0,z:(dirB[e+120]|(dirB[e+121]<<8)|(dirB[e+122]<<16)|(dirB[e+123]<<24))>>>0}}
+  var miniFat=null,miniData=null;
+  function readStream(name){var en=ents[name];if(!en)return null;
+    if(en.z>=cut)return readBig(en.s,en.z);
+    if(!miniFat){var mfb=readBig(mf0,nmf*ss);miniFat=[];for(var j=0;j<mfb.length;j+=4)miniFat.push((mfb[j]|(mfb[j+1]<<8)|(mfb[j+2]<<16)|(mfb[j+3]<<24))>>>0);var root=ents['Root Entry'];miniData=readBig(root.s,root.z)}
+    var out=new Uint8Array(en.z),p=0,s=en.s;while(s<0xFFFFFFFA&&p<en.z){var n=Math.min(ms,en.z-p);out.set(miniData.subarray(s*ms,s*ms+n),p);p+=n;s=miniFat[s]}return out}
+  var W=readStream('WordDocument');if(!W)throw new Error('找不到 WordDocument');
+  function w16(o){return W[o]|(W[o+1]<<8)}function w32(o){return(W[o]|(W[o+1]<<8)|(W[o+2]<<16)|(W[o+3]<<24))>>>0}
+  if(w16(0)!==0xA5EC)throw new Error('不是 Word 97 以上格式');
+  var T=readStream((w16(0x0A)&0x200)?'1Table':'0Table');if(!T)throw new Error('找不到 Table stream');
+  function t16(o){return T[o]|(T[o+1]<<8)}function t32(o){return(T[o]|(T[o+1]<<8)|(T[o+2]<<16)|(T[o+3]<<24))>>>0}
+  var ccpText=w32(0x4C),fcClx=w32(0x1A2),lcbClx=w32(0x1A6);
+  var p0=fcClx;while(T[p0]===1){p0+=3+t16(p0+1)}
+  if(T[p0]!==2)throw new Error('找不到文字表');
+  var lcb=t32(p0+1);var pc=p0+5;var np=(lcb-4)/12;var cps=[];for(var i2=0;i2<=np;i2++)cps.push(t32(pc+i2*4));
+  var pieces=[];var pcd=pc+(np+1)*4;
+  for(var i3=0;i3<np;i3++){var fc=t32(pcd+i3*8+2);var comp=!!(fc&0x40000000);fc=fc&0x3FFFFFFF;pieces.push({c0:cps[i3],c1:cps[i3+1],fc:comp?fc/2:fc,comp:comp})}
+  var text=new Array(ccpText);
+  pieces.forEach(function(pi){for(var c=pi.c0;c<pi.c1&&c<ccpText;c++){var o=pi.comp?pi.fc+(c-pi.c0):pi.fc+(c-pi.c0)*2;
+    text[c]=pi.comp?String.fromCharCode(W[o]):String.fromCharCode(W[o]|(W[o+1]<<8))}});
+  function fc2cp(fc){for(var i=0;i<pieces.length;i++){var pi=pieces[i];var bpc=pi.comp?1:2;var len=(pi.c1-pi.c0)*bpc;if(fc>=pi.fc&&fc<pi.fc+len)return pi.c0+Math.floor((fc-pi.fc)/bpc)}return -1}
+  // PAPX: paragraph flags (in table / row end)
+  var rowEnd={},inTbl=new Uint8Array(ccpText+1);
+  var fcB=w32(0x102),lcbB=w32(0x106);var nb=(lcbB-4)/8;var pns=[];for(var i4=0;i4<nb;i4++)pns.push(t32(fcB+(nb+1)*4+i4*4));
+  pns.forEach(function(pn){var base=pn*512;var crun=W[base+511];
+    for(var r=0;r<crun;r++){var fcS=w32(base+r*4),fcE=w32(base+(r+1)*4);var bo=W[base+(crun+1)*4+r*13]*2;if(!bo)continue;
+      var cb=W[base+bo];var o=base+bo+1;var size;if(cb===0){size=W[o]*2;o+=1}else size=cb*2-1;
+      var end=o+size;o+=2;var isT=false,isTtp=false;
+      while(o+2<=end){var op=W[o]|(W[o+1]<<8);o+=2;var spra=op>>13,sz;
+        if(op===0xD608){sz=(W[o]|(W[o+1]<<8))+1;o+=sz-0;o-=0;continue}
+        if(spra===6){sz=1+W[o]}else if(spra===0||spra===1)sz=1;else if(spra===2||spra===4||spra===5)sz=2;else if(spra===3)sz=4;else sz=3;
+        if(op===0x2416&&W[o])isT=true;if(op===0x2417&&W[o])isTtp=true;o+=sz}
+      var ce=fc2cp(fcE-1),cs=fc2cp(fcS);if(ce>=0&&cs>=0){if(isT||isTtp)for(var q=cs;q<=ce&&q<ccpText;q++)inTbl[q]=1;if(isTtp)rowEnd[ce]=1}}});
+  // build blocks (strip field codes)
+  var blocks=[],prevP=[],rows=null,cells=null,cur='',para='',fdepth=0,inRes=[];
+  function flushPara(){var s=para.trim();if(s){prevP.push(s);if(prevP.length>3)prevP.shift()}para=''}
+  function closeTable(){if(rows){blocks.push({rows:rows,prev:prevP.slice()});prevP=[];rows=null;cells=null;cur=''}}
+  for(var c=0;c<ccpText;c++){var ch=text[c];
+    if(ch==='\x13'){inRes.push(false);continue}
+    if(ch==='\x14'){if(inRes.length)inRes[inRes.length-1]=true;continue}
+    if(ch==='\x15'){inRes.pop();continue}
+    if(inRes.length&&!inRes[inRes.length-1])continue;
+    if(ch==='\x07'){
+      if(!rows){flushPara();rows=[];cells=[]}
+      if(rowEnd[c]){if(cells.length)rows.push(cells);cells=[];cur=''}
+      else{cells.push(cur.replace(/\n+$/,'').trim());cur=''}
+    }else if(ch==='\r'){
+      if(inTbl[c]&&rows){cur+='\n'}else{closeTable();flushPara()}
+    }else if(ch>=' '||ch==='\t'){if(rows)cur+=ch;else if(inTbl[c]){flushPara();rows=[];cells=[];cur=ch}else para+=ch}
+  }
+  closeTable();
+  var out=blocks.map(function(bk){
+    var cnt={};bk.rows.forEach(function(r){cnt[r.length]=(cnt[r.length]||0)+1});
+    var N=0,best=0;Object.keys(cnt).map(Number).sort(function(x,y){return x-y}).forEach(function(k){if(k>=2&&cnt[k]>best){best=cnt[k];N=k}});
+    var g=[];bk.rows.forEach(function(r){
+      if(N&&r.length>N&&(r.length+1)%(N+1)===0){var ok=true;for(var i=N;i<r.length;i+=N+1)if(r[i]!=='')ok=false;
+        if(ok){for(var s0=0;s0<r.length;s0+=N+1)g.push(r.slice(s0,s0+N));return}}
+      g.push(r)});
+    return{grid:g,prev:bk.prev}});
+  return out;
+}
+
+async function docxBlocks(buf){
+  var xml=await unzipEntry(buf,'word/document.xml');
   var doc=new DOMParser().parseFromString(xml,'application/xml');
   var body=doc.getElementsByTagNameNS(W_NS,'body')[0];
   var blocks=[];var prevP=[];
   for(var el=body.firstChild;el;el=el.nextSibling){
     if(el.localName==='p'){var t=pText(el).trim();if(t){prevP.push(t);if(prevP.length>3)prevP.shift()}}
-    else if(el.localName==='tbl'){var gg=tblGrid(el);var hi=hdrIdx(gg);var pv=prevP.slice();for(var q=0;q<hi;q++)pv.push(gg[q].join(''));blocks.push({grid:gg,hi:hi,prev:pv});prevP=[]}
+    else if(el.localName==='tbl'){blocks.push({grid:tblGrid(el),prev:prevP.slice()});prevP=[]}
   }
+  return blocks;
+}
+async function parseDocx(file){
+  var buf=await file.arrayBuffer();
+  var raw=/\.doc$/i.test(file.name)?docBlocks(buf):await docxBlocks(buf);
+  var blocks=raw.map(function(bk){var gg=bk.grid;var hi=hdrIdx(gg);var pv=bk.prev.slice();for(var q=0;q<hi;q++)pv.push(gg[q].join(''));return{grid:gg,hi:hi,prev:pv}});
   var res={name:'',total:'',segs:[],notes:[],ok:[],stat:null};
   function titleNear(b,re){return b.prev.some(function(p){return re.test(normT(p))})}
   var basic=null,t3=null,t9=null,stat=null;
@@ -720,6 +801,7 @@ async function parseDocx(file){
     var g9=t9.grid,h9=g9[t9.hi];var c9s=findCol(h9,[/SEG|相似暴露族群\(?代號/]),c9n=findCol(h9,[/作業場所/]),c9p=findCol(h9,[/人數/]),c9i=findCol(h9,[/暴露危害物質|採樣點數/]);
     if(c9s<0)c9s=h9.length-1;
     var c9=0;
+    for(var rf=t9.hi+2;rf<g9.length;rf++){[c9s,c9n,c9p].forEach(function(ci){if(ci>=0&&g9[rf][ci]===''&&g9[rf][c9i]&&g9[rf-1][ci])g9[rf][ci]=g9[rf-1][ci]})}
     for(var r2=t9.hi+1;r2<g9.length;r2++){
       var rw=g9[r2];var cs=normT(rw[c9s]);var m=cs.match(/SEG\d+/i);var code2=m?m[0].toUpperCase():'全廠';
       var place=(rw[c9n]||'').replace(/\n/g,'');
@@ -757,14 +839,13 @@ function showReport(r,fname){
 $('#docBtn').onclick=function(){$('#docFile').click()};
 $('#docFile').onchange=async function(){
   var f=this.files[0];this.value='';if(!f)return;
-  if(/\.doc$/i.test(f.name)){alert('這是舊版 .doc 格式，網頁讀不了。\n請用 Word 開啟後「另存新檔」成 .docx 再匯入。');return}
   try{
     var r=await parseDocx(f);
     if(!r.segs.length){alert('讀不到 SEG 資料，請確認是否為作業環境監測計畫書。');return}
     if((state.segs||[]).some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})})&&!confirm('目前已有資料，匯入會覆蓋，確定嗎？'))return;
     state={name:r.name,total:r.total,segs:r.segs};
     syncTop();renderSegs();save();update(true);showReport(r,f.name);
-  }catch(e){alert('讀取失敗：'+e.message+'\n若是 .doc 請先另存成 .docx')}
+  }catch(e){alert('讀取失敗：'+e.message+'\n若是舊版 .doc，請用 Word 另存成 .docx 再匯入。')}
 };
 
 $('#exp').onclick=function(){
