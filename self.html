@@ -975,7 +975,9 @@ window.__db=docBlocks;
 async function parseDocx(file){
   var buf=await file.arrayBuffer();
   var raw=/\.doc$/i.test(file.name)?docBlocks(buf):await docxBlocks(buf);
+  var rawPics=(raw&&raw.pics)||[];
   raw=(raw||[]).filter(function(bk){return bk&&bk.grid&&bk.grid.length&&bk.grid.every(function(r){return Array.isArray(r)})});
+  raw.pics=rawPics;
   var blocks=raw.map(function(bk){var gg=bk.grid;var hi=hdrIdx(gg);var pv=(bk.prev||[]).slice();for(var q=0;q<hi;q++)pv.push((gg[q]||[]).join(''));return{grid:gg,hi:hi,prev:pv}});
   var res={name:'',total:'',segs:[],notes:[],ok:[],stat:null};
   function titleNear(b,re){return b.prev.some(function(p){return re.test(normT(p))})}
