@@ -134,7 +134,6 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   </div>
   <div id="impReport"></div>
   <div id="segs"></div>
-  <div id="grpBox"></div>
 
   <div id="resultBox">
     <div id="guard"></div>
@@ -304,7 +303,7 @@ function compute(cs, S, CH) {
   } else {
     var groups = {};
     var uid = 0;
-    rows.forEach(function (r) { var k = r.item + '|' + (r.grp ? 'G' + r.grp : (r.pgrp ? 'P' + r.pgrp : 'U' + (uid++))); (groups[k] = groups[k] || []).push(r); });
+    rows.forEach(function (r) { var k = r.item; (groups[k] = groups[k] || []).push(r); });
     Object.keys(groups).forEach(function (k) {
       var ms = groups[k];
       var allLow = ms.every(function (r) { return r.ratio !== null && r.ratio < 0.5; });
@@ -525,61 +524,10 @@ function finRows(R){
   list.sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
   return list;
 }
-function grpMembers(){
-  var m={},ord=[];
-  state.segs.forEach(function(g,gi){(g.items||[]).forEach(function(it,ii){
-    if(!it.name||!String(it.name).trim()||rowKind(it)==='k-gray')return;
-    var k=String(it.name).trim();if(!m[k]){m[k]=[];ord.push(k)}
-    if(m[k].some(function(x){return x.gi===gi}))return;
-    m[k].push({g:g,gi:gi,ii:ii,it:it})})});
-  return{m:m,list:ord.filter(function(k){return m[k].length>=2})};
-}
-function renderGrpPanel(R){
-  var el=$('#grpBox');if(!el)return;
-  var big=(parseFloat(state.total)||0)>=100;var GM=grpMembers(),m=GM.m,list=GM.list;
-  if(big||!list.length){el.innerHTML='';return}
-  var LT='ABCDEFGH'.split('');
-  var h='<div class="card" style="border-color:var(--accent)"><b>哪些 SEG 是相同作業？</b><div class="hint" style="margin:2px 0 6px">每個化學品各自勾選：勾在同一列的 SEG 併成一組，只測濃度最高的一區。不勾＝各自採樣。</div>';
-  list.forEach(function(k){
-    var used=[];m[k].forEach(function(x){if(x.it.grp&&used.indexOf(x.it.grp)<0)used.push(x.it.grp)});used.sort();
-    var rows=used.slice();var nx=LT.filter(function(c){return used.indexOf(c)<0})[0];if(nx&&(!rows.length||rows.every(function(c){return m[k].filter(function(x){return x.it.grp===c}).length>=2})))rows.push(nx);
-    h+='<div style="padding:8px 0;border-top:1px solid var(--line,#e5e5e5)"><div class="row" style="justify-content:space-between"><b>'+esc(k)+'</b>'+(used.length?'<button class="btn sm" data-apply="'+esc(k)+'">同樣分組套用到其他化學品</button>':'')+'</div>';
-    rows.forEach(function(c){
-      h+='<div class="row" style="gap:6px;margin-top:4px;align-items:center"><span class="badge" style="min-width:34px;text-align:center">組 '+c+'</span>';
-      m[k].forEach(function(x){
-        var on=x.it.grp===c;
-        h+='<label style="display:inline-flex;gap:4px;align-items:center;padding:4px 8px;border:1px solid '+(on?'var(--accent)':'#ddd')+';border-radius:8px;font-size:14px;'+(on?'background:#EAF4EE;font-weight:700':'')+'"><input type="checkbox" data-gi="'+x.gi+'" data-ii="'+x.ii+'" data-l="'+c+'"'+(on?' checked':'')+'>'+esc(x.g.code)+(x.g.name?'<span class="hint"> '+esc(x.g.name)+'</span>':'')+'</label>';
-      });
-      h+='</div>';
-    });
-    var rs=(R.rows||[]).filter(function(r){return r.item===k});var msgs=[],warn=[];
-    used.forEach(function(c){
-      var mem=m[k].filter(function(x){return x.it.grp===c});
-      if(mem.length<2){warn.push('組 '+c+' 只有 '+mem[0].g.code+'，沒有作用，請再勾一個 SEG');return}
-      var gr=rs.filter(function(r){return r.grp===c});var sk=gr.filter(function(r){return r.skip});
-      if(sk.length)msgs.push('組 '+c+'：只測 '+gr.filter(function(r){return !r.skip}).map(function(r){return r.seg}).join('、')+'，'+sk.map(function(r){return r.seg}).join('、')+' 免測');
-      else{var miss=gr.filter(function(r){return r.ratio===null}).map(function(r){return r.seg}),hi=gr.filter(function(r){return r.ratio!==null&&r.ratio>=0.5}).map(function(r){return r.seg});
-        warn.push('組 '+c+'：不能併，各自採樣。原因：'+(miss.length?miss.join('、')+' 還沒有濃度（請填濃度或匯入統計表）':'')+(miss.length&&hi.length?'；':'')+(hi.length?hi.join('、')+' 濃度 ≥1/2 容許標準':''))}
-    });
-    if(msgs.length)h+='<div style="margin-top:4px;color:#2E7D4F;font-size:14px">'+msgs.map(esc).join('<br>')+'</div>';
-    if(warn.length)h+='<div style="margin-top:4px;color:#B54708;font-size:14px">⚠ '+warn.map(esc).join('<br>⚠ ')+'</div>';
-    h+='</div>';
-  });
-  el.innerHTML=h+'</div>';
-}
-$('#grpBox').addEventListener('change',function(e){var t=e.target;if(t.dataset.gi===undefined)return;var it=state.segs[+t.dataset.gi].items[+t.dataset.ii];it.grp=t.checked?t.dataset.l:'';save();update(true)});
-$('#grpBox').addEventListener('click',function(e){
-  var b=e.target.closest('[data-apply]');if(!b)return;
-  var GM=grpMembers(),src=GM.m[b.dataset.apply];if(!src)return;
-  var map={};src.forEach(function(x){map[x.gi]=x.it.grp||''});
-  var others=GM.list.filter(function(k){return k!==b.dataset.apply});
-  if(others.some(function(k){return GM.m[k].some(function(x){return x.it.grp})})&&!confirm('其他化學品已有的分組會被覆蓋，確定？'))return;
-  others.forEach(function(k){GM.m[k].forEach(function(x){x.it.grp=map[x.gi]||''})});
-  save();update(true)});
 function update(regen){
   var big=(parseFloat(state.total)||0)>=100;
   var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
-  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);renderGrpPanel(R);
+  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
   var cf=[];state.segs.forEach(function(g){
     if(g.flag&&g.flag.name&&!g.flag.name.soft)cf.push(g.code+' 場所名稱：彙整表「'+g.name+'」，採樣策略表「'+g.flag.name.other+'」');
     if(g.flag&&g.flag.people)cf.push(g.code+' 人數：彙整表 '+g.people+'，採樣策略表 '+g.flag.people.other);
