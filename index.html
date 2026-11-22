@@ -733,8 +733,8 @@ function tblGrid(tbl){
   });
   return rows;
 }
-function hdrIdx(g){for(var i=0;i<g.length;i++){var d={};g[i].forEach(function(c){if(c)d[c]=1});if(Object.keys(d).length>=3)return i}return 0}
-function findCol(hdr,res){for(var i=0;i<hdr.length;i++){var h=normT(hdr[i]);for(var j=0;j<res.length;j++)if(res[j].test(h))return i}return -1}
+function hdrIdx(g){for(var i=0;i<g.length;i++){var d={};(g[i]||[]).forEach(function(c){if(c)d[c]=1});if(Object.keys(d).length>=3)return i}return 0}
+function findCol(hdr,res){hdr=hdr||[];for(var i=0;i<hdr.length;i++){var h=normT(hdr[i]);for(var j=0;j<res.length;j++)if(res[j].test(h))return i}return -1}
 function docBlocks(buf){
   var b=new Uint8Array(buf);
   function r16(o){return b[o]|(b[o+1]<<8)}function r32(o){return(b[o]|(b[o+1]<<8)|(b[o+2]<<16)|(b[o+3]<<24))>>>0}
@@ -784,7 +784,7 @@ function docBlocks(buf){
   // build blocks (strip field codes)
   var blocks=[],prevP=[],rows=null,cells=null,cur='',para='',fdepth=0,inRes=[];
   function flushPara(){var s=para.trim();if(s){prevP.push(s);if(prevP.length>3)prevP.shift()}para=''}
-  function closeTable(){if(rows){blocks.push({rows:rows,prev:prevP.slice()});prevP=[];rows=null;cells=null;cur=''}}
+  function closeTable(){if(rows){if(cells&&cells.length)rows.push(cells);blocks.push({rows:rows,prev:prevP.slice()});prevP=[];rows=null;cells=null;cur=''}}
   for(var c=0;c<ccpText;c++){var ch=text[c];
     if(ch==='\x13'){inRes.push(false);continue}
     if(ch==='\x14'){if(inRes.length)inRes[inRes.length-1]=true;continue}
@@ -805,7 +805,7 @@ function docBlocks(buf){
     var g=[];bk.rows.forEach(function(r){
       var cands=[N];var n0=0;while(n0<r.length&&r[n0]!=='')n0++;if(n0>=3&&n0<r.length)cands.push(n0);
       for(var ci=0;ci<cands.length;ci++){var NN=cands[ci];
-        if(NN&&r.length>NN&&(r.length+1)%(NN+1)===0){var ok=true;for(var i=NN;i<r.length;i+=NN+1)if(r[i]!=='')ok=false;
+        if(NN&&r.length>NN&&((r.length+1)%(NN+1)===0||r.length%(NN+1)===0)){var ok=true;for(var i=NN;i<r.length;i+=NN+1)if(r[i]!=='')ok=false;
           if(ok){for(var s0=0;s0<r.length;s0+=NN+1)g.push(r.slice(s0,s0+NN));return}}}
       g.push(r)});
     return{grid:g,prev:bk.prev}});
@@ -889,18 +889,21 @@ async function docxBlocks(buf){
     if(/^word\/media\/.+\.(emf|wmf)$/i.test(nm)){var bytes=await unzipBytes(buf,nm);if(bytes)blocks.pics.push({emf:(bytes[0]===1&&bytes[1]===0&&bytes[40]===0x20&&bytes[41]===0x45&&bytes[42]===0x4D&&bytes[43]===0x46),comp:0xFE,data:bytes})}}}catch(e){}
   return blocks;
 }
+window.__db=docBlocks;
 async function parseDocx(file){
   var buf=await file.arrayBuffer();
   var raw=/\.doc$/i.test(file.name)?docBlocks(buf):await docxBlocks(buf);
-  var blocks=raw.map(function(bk){var gg=bk.grid;var hi=hdrIdx(gg);var pv=bk.prev.slice();for(var q=0;q<hi;q++)pv.push(gg[q].join(''));return{grid:gg,hi:hi,prev:pv}});
+  raw=(raw||[]).filter(function(bk){return bk&&bk.grid&&bk.grid.length&&bk.grid.every(function(r){return Array.isArray(r)})});
+  var blocks=raw.map(function(bk){var gg=bk.grid;var hi=hdrIdx(gg);var pv=(bk.prev||[]).slice();for(var q=0;q<hi;q++)pv.push((gg[q]||[]).join(''));return{grid:gg,hi:hi,prev:pv}});
   var res={name:'',total:'',segs:[],notes:[],ok:[],stat:null};
   function titleNear(b,re){return b.prev.some(function(p){return re.test(normT(p))})}
   var basic=null,t3=null,t9=null,stat=null;
   blocks.forEach(function(b){
     var all=normT(b.grid.map(function(r){return r.join('|')}).join('|'));
     var h=b.grid[b.hi]?normT(b.grid[b.hi].join('|')):'';
-    if(!t9&&(titleNear(b,/作業環境監測計畫採樣策略彙整表/)||(/採樣點數|採樣方式/.test(h)&&/暴露危害物質/.test(h))))t9=b;
-    else if(!t3&&(titleNear(b,/相似暴露族群及暴露危害物質彙整表/)||(/暴露危害物質/.test(h)&&/SEG|相似暴露/.test(h)&&/部門|作業人數/.test(h))))t3=b;
+    var okT=b.grid.length>=2&&b.grid[b.hi]&&b.grid[b.hi].length>=3;
+    if(!t9&&okT&&(titleNear(b,/作業環境監測計畫採樣策略彙整表/)&&/暴露危害物質|採樣點數|採樣方式/.test(all)||(/採樣點數|採樣方式/.test(h)&&/暴露危害物質/.test(h))))t9=b;
+    else if(!t3&&okT&&(titleNear(b,/相似暴露族群及暴露危害物質彙整表/)&&/SEG|相似暴露/.test(all)||(/暴露危害物質/.test(h)&&/SEG|相似暴露/.test(h)&&/部門|作業人數/.test(h))))t3=b;
     else if(!basic&&(titleNear(b,/工廠基本資料/)||/工廠名稱/.test(all)&&/員工人數/.test(all)))basic=b;
     else if(!stat&&(/統計表|95百分位|X95/i.test(b.prev.map(normT).join('')+h))&&/SEG/.test(all))stat=b;
   });
@@ -986,7 +989,7 @@ $('#docFile').onchange=async function(){
     if((state.segs||[]).some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})})&&!confirm('目前已有資料，匯入會覆蓋，確定嗎？'))return;
     state={name:r.name,total:r.total,segs:r.segs};
     syncTop();renderSegs();save();update(true);showReport(r,f.name);
-  }catch(e){alert('讀取失敗：'+e.message+'\n若是舊版 .doc，請用 Word 另存成 .docx 再匯入。')}
+  }catch(e){alert('讀取失敗：'+e.message+'\n請把這個檔案傳給開發者檢查（也可先用 Word 另存成 .docx 再匯入）。')}
 };
 
 
