@@ -134,6 +134,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   </div>
   <div id="impReport"></div>
   <div id="segs"></div>
+  <div id="grpBox"></div>
 
   <div id="resultBox">
     <div id="guard"></div>
@@ -273,6 +274,7 @@ function compute(cs, S, CH) {
       var people = parseFloat(g.people) || 0;
       var r = {
         seg: g.code || '', segName: g.name || '', group: String(g.group || g.name || g.code || '').trim(),
+        grp: String(it.grp || '').trim(), pgrp: String(g.group || '').trim(),
         people: people, item: name, ch: ch, legal: lg, unit: unit, pel: pel, conc: it.conc, nd: c.nd,
         ratio: ratio, tier: tierOf(ratio), src: src, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false
       };
@@ -301,7 +303,8 @@ function compute(cs, S, CH) {
     });
   } else {
     var groups = {};
-    rows.forEach(function (r) { var k = r.item + '|' + r.group; (groups[k] = groups[k] || []).push(r); });
+    var uid = 0;
+    rows.forEach(function (r) { var k = r.item + '|' + (r.grp ? 'G' + r.grp : (r.pgrp ? 'P' + r.pgrp : 'U' + (uid++))); (groups[k] = groups[k] || []).push(r); });
     Object.keys(groups).forEach(function (k) {
       var ms = groups[k];
       var allLow = ms.every(function (r) { return r.ratio !== null && r.ratio < 0.5; });
@@ -522,10 +525,40 @@ function finRows(R){
   list.sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
   return list;
 }
+function renderGrpPanel(R){
+  var el=$('#grpBox');if(!el)return;
+  var big=(parseFloat(state.total)||0)>=100;var m={},ord=[];
+  state.segs.forEach(function(g,gi){(g.items||[]).forEach(function(it,ii){
+    if(!it.name||!String(it.name).trim()||rowKind(it)==='k-gray')return;
+    var k=String(it.name).trim();if(!m[k]){m[k]=[];ord.push(k)}m[k].push({g:g,gi:gi,ii:ii,it:it})})});
+  var list=ord.filter(function(k){return m[k].length>=2});
+  if(big||!list.length){el.innerHTML='';return}
+  var LT='ABCDEF'.split('');
+  var h='<div class="card" style="border-color:var(--accent)"><b>相同作業勾選</b><div class="hint" style="margin:2px 0 8px">同一化學品出現在多個 SEG 時，把「相同作業」的 SEG 選成同一組（組別一樣就是同組）。同組全部 &lt;1/2 PEL，只測濃度最高的那個 SEG；不選＝各自採樣。</div>';
+  list.forEach(function(k){
+    h+='<div style="padding:8px 0;border-top:1px solid var(--line,#e5e5e5)"><b>'+esc(k)+'</b><div class="row" style="gap:8px;margin-top:4px">';
+    m[k].forEach(function(x){
+      h+='<label class="f" style="min-width:110px;flex:none">'+esc(x.g.code)+(x.g.name?' <span class="hint">'+esc(x.g.name)+'</span>':'')+'<select data-gi="'+x.gi+'" data-ii="'+x.ii+'"><option value="">不併</option>'+LT.map(function(c){return'<option value="'+c+'"'+(x.it.grp===c?' selected':'')+'>組 '+c+'</option>'}).join('')+'</select></label>';
+    });
+    h+='</div>';
+    var rs=(R.rows||[]).filter(function(r){return r.item===k});
+    var skipped=rs.filter(function(r){return r.skip}),reps=[];
+    skipped.forEach(function(r){var mm=/由 (\S+) 代表/.exec((r.notes||[]).join('|'));if(mm&&reps.indexOf(mm[1])<0)reps.push(mm[1])});
+    var gc={};m[k].forEach(function(x){if(x.it.grp)gc[x.it.grp]=(gc[x.it.grp]||0)+1});
+    var multi=Object.keys(gc).filter(function(c){return gc[c]>=2});
+    var msg='';
+    if(skipped.length)msg+='併組結果：只測 '+reps.join('、')+'，'+skipped.map(function(r){return r.seg}).join('、')+' 免測。';
+    if(multi.length&&multi.some(function(c){return !rs.some(function(r){return r.grp===c&&r.skip})}))msg+=(msg?' ':'')+'有同組含 ≥1/2 PEL 或缺濃度，該組仍各自採樣。';
+    if(msg)h+='<div class="hint" style="margin-top:4px;color:#2E7D4F">'+esc(msg)+'</div>';
+    h+='</div>';
+  });
+  el.innerHTML=h+'</div>';
+}
+$('#grpBox').addEventListener('change',function(e){var t=e.target;if(t.dataset.gi===undefined)return;state.segs[+t.dataset.gi].items[+t.dataset.ii].grp=t.value;save();update(true)});
 function update(regen){
   var big=(parseFloat(state.total)||0)>=100;
   var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
-  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
+  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);renderGrpPanel(R);
   var cf=[];state.segs.forEach(function(g){
     if(g.flag&&g.flag.name&&!g.flag.name.soft)cf.push(g.code+' 場所名稱：彙整表「'+g.name+'」，採樣策略表「'+g.flag.name.other+'」');
     if(g.flag&&g.flag.people)cf.push(g.code+' 人數：彙整表 '+g.people+'，採樣策略表 '+g.flag.people.other);
