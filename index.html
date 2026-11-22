@@ -730,7 +730,7 @@ function adjReason(r,S){
   else if(m==='skip'){fq='免測（附表之註）';txt=judge+lt+'且本項目各族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群（'+r.rep+'，'+fmtPct(r.repRatio)+'），本族群本次免測。'}
   else if(m==='best'){fq='每 6 個月';txt=judge+lt+'且本項目各相似暴露族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群；本族群為最高者，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
   else if(m==='low1'){fq='每 6 個月';txt=judge+lt+'本項目濃度低於容許標準的 1/2，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
-  else if(m==='pending'){fq='每 6 個月（暫）';txt=judge+'本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，暫以 '+r.n+' 個樣本計，需個案判定。'+(pp?' '+pp:'')}
+  else if(m==='pending'){fq='每 6 個月（暫）';txt=judge+'本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，暫以 '+r.n+' 個樣本計。'+(pp?' '+pp:'')}
   else{fq='每 '+r.freq+' 個月';txt=judge+lt+'屬「'+r.tier.label+'」，依公告每 '+r.freq+' 個月監測一次，每次 '+r.n+' 個樣本。'+(pp?' '+pp:'')}
   return{fq:fq,txt:txt+personal}
 }
@@ -758,7 +758,7 @@ function buildAdjDocx(R,G){
   B.push(wPara('勞動部 115 年 11 月 19 日勞職授字第1150254044A號公告「雇主應實施作業環境監測之作業場所應監測對象、採樣數量及頻率等事項」，自 116 年 1 月 1 日施行。監測改以「相似暴露族群」為單位：每一族群之每一監測項目須先完成初始採樣（至少 6 個樣本），之後依事業單位勞工人數及暴露濃度級距，決定定期監測頻率與樣本數；族群勞工 3 人以上未達 10 人者至少 3 個樣本，未達 3 人者全部勞工採樣。'));
   H('二、貴公司適用情形');
   var tot=parseFloat(state.total)||0;
-  B.push(wPara('貴公司勞工人數 '+(state.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+(pending.length?'（另 '+pending.length+' 項待確認）':'')+'。'));
+  B.push(wPara('貴公司勞工人數 '+(state.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+'。'));
   var bl=[];
   if(nNo)bl.push(nNo+' 個項目尚無數據，需先完成初始採樣（每項目 6 個樣本）');
   if(skipItems.length)bl.push(skipItems.length+' 個項目（'+skipItems.join('、')+'）依附表之註只測濃度最高族群，其餘族群本次免測');
@@ -780,10 +780,6 @@ function buildAdjDocx(R,G){
     var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':'本項目依場所判斷，維持現況點數。');
     T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[3],['維持現況'])+wCell(W[4],[why])+'</w:tr>'});
   T+='</w:tbl>';B.push(T);
-  var pl=[];
-  pending.forEach(function(r){pl.push(r.seg+' '+(r.segName||'')+'｜'+r.item+'：本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，需個案判定。')});
-  noise.forEach(function(k){pl.push(k.seg+' '+(k.segName||'')+'｜'+k.item+'：噪音是否適用本公告附表之頻率與點數，尚待主管機關確認，暫維持原規劃。')});
-  if(pl.length){H('四、待確認事項');pl.forEach(function(t){B.push(wPara('・'+t,{ind:true,after:40}))})}
   B.push(wPara('註：本次以簡易暴露濃度判定；116 年起完成暴露評估報告後，將依評估結果重新檢討級距與頻率。',{sz:20,color:'4A5868',before:160}));
   var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
   var HD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
