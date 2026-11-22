@@ -150,7 +150,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
         <div class="scroll"><table class="res" id="resTbl"></table></div>
       </details>
       <details class="fold" id="sayBox"><summary>客戶說明</summary>
-        <div class="row" style="justify-content:flex-end;margin:6px 0"><select id="sayStyle" style="max-width:62%"><option value="1">版本1　親切說明</option><option value="2">版本2　語氣委婉</option><option value="3">版本3　法規如此，只能遵守</option><option value="4">版本4　回覆客戶抱怨點數多、金額變動大</option><option value="5">版本5　精簡版（LINE）</option></select><button class="btn sm" id="forceSay" hidden>仍產生暫估版</button><button class="btn sm" id="regen">重新產生</button><button class="btn sm pri" id="copySay">複製</button></div>
+        <div class="row" style="justify-content:flex-end;margin:6px 0"><select id="sayStyle" style="max-width:62%"><option value="1">版本1　親切說明</option><option value="2">版本2　語氣委婉</option><option value="3">版本3　法規如此，只能遵守</option><option value="4">版本4　回覆客戶抱怨點數多、金額變動大</option><option value="5">版本5　精簡版（LINE）</option><option value="6">版本6　客戶問：是哪條法規？（附法源）</option></select><button class="btn sm" id="forceSay" hidden>仍產生暫估版</button><button class="btn sm" id="regen">重新產生</button><button class="btn sm pri" id="copySay">複製</button></div>
         <textarea class="say" id="say"></textarea>
       </details>
     </div>
@@ -636,7 +636,13 @@ function makeSay(R,G){
     L.push('這次的變動並不是我們調整報價方式，而是勞動部新修法自 116 年 1 月 1 日起，監測樣本數改依勞工人數和濃度級距計算，每輪測點由現行 '+P+(up?'，增加 '+d+' 點':'')+'，金額的變化主要來自測點數。');
     L.push('我們已逐項依貴廠歷次監測結果，以法規允許的最少點數報價。'+same);
     add(sHi);add(sSt);add(sKp);
-    L.push('報價表中每個項目的測點數都列得很清楚，若對哪一項有疑問，我們可以逐項對照法規說明依據，也歡迎隨時跟我們討論。');
+    L.push('若對哪一項有疑問，歡迎隨時跟我們討論，我們很樂意為您說明。');
+  }else if(st===6){
+    L.push('您好，這個我直接跟您說清楚。');
+    L.push('這次測點增加，主要是因為勞動部修法了：《勞工作業環境監測實施辦法》115 年 6 月修正，115 年 11 月 19 日又以勞職授字第 1150254044A 號公告「雇主應實施作業環境監測之監測對象、採樣數量及頻率等事項」，116 年 1 月 1 日起，樣本數要依人數和濃度級距重新計算。雇主依《職業安全衛生法》第 12 條本來就要實施作業環境監測，新規定出來後，我們也是照新規定重新幫貴廠評估，並不是單方面調整。');
+    L.push('我們能做的，是報價時只用法規允許的最少點數，每輪由現行 '+P+'。'+same);
+    add(sHi);add(sSt);add(sKp);
+    L.push('公告原文網路上查得到，您要拿去跟主管說明，我們也可以把原文和貴廠每個項目怎麼算的整理給您。');
   }else{
     L.push('您好，因勞動部新修法 116/1/1 起實施，監測測點改依人數與濃度級距計算，每輪由 '+P+'，我們已用法規允許的最少點數報價。');
     add(sSt?sSt:'');
@@ -964,7 +970,7 @@ async function parseDocx(file){
   for(var pi=0;pi<(raw.pics||[]).length&&!statRows;pi++){var tk=await picTokens(raw.pics[pi]);statRows=parseStatTokens(tk)}
   if(statRows&&statRows.length){res.stat=statRows}
   else res.notes.push('找不到歷年統計表（X95），濃度需另外提供');
-  res.segs=order.map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});if(!s.items.length&&c!=='全廠')res.notes.push(c+' 採樣策略表沒有任何化學品（不列入測點）');return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.method)o.method=i.method;if(i.flag)o.flag=i.flag;if(i.sflag)o.sflag=i.sflag;return o})}});
+  res.segs=order.filter(function(c){if(c==='全廠'||segs[c].items.length)return true;res.notes.push(c+' 只在彙整表，採樣策略表沒有項目，已不列入（以採樣策略表為主）');return false}).map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.method)o.method=i.method;if(i.flag)o.flag=i.flag;if(i.sflag)o.sflag=i.sflag;return o})}});
   if(res.stat){var applied=0;
     res.stat.forEach(function(sr){var sg=res.segs.filter(function(g){return g.code===sr.seg})[0];
       if(!sg){res.notes.push('統計表 '+sr.seg+'：計畫書沒有這個 SEG');return}
