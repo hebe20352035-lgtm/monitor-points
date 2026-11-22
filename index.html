@@ -139,7 +139,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <div id="resultBox">
     <div id="guard"></div>
     <div class="card">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><button class="btn sm" id="copyTbl">複製</button></div>
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><span style="display:flex;gap:6px"><button class="btn sm" id="dlAdj">下載調整說明（Word）</button><button class="btn sm" id="copyTbl">複製</button></span></div>
       <div class="total"><div><b id="sNew">0</b><span>每輪測點</span></div><div><b id="sYear">0</b><span>全年測點</span></div><div><b id="s3Year">0</b><span>三年測點</span></div></div>
       <div id="sNewLb" class="hint"></div>
       <div class="scroll" style="margin-top:8px"><table class="res fin" id="finTbl"></table></div>
@@ -276,7 +276,7 @@ function compute(cs, S, CH) {
         seg: g.code || '', segName: g.name || '', group: String(g.group || g.name || g.code || '').trim(),
         grp: String(it.grp || '').trim(), pgrp: String(g.group || '').trim(),
         people: people, item: name, ch: ch, legal: lg, unit: unit, pel: pel, conc: it.conc, nd: c.nd,
-        ratio: ratio, tier: tierOf(ratio), src: src, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false
+        ratio: ratio, tier: tierOf(ratio), src: src, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false, method: it.method || '', mode: ''
       };
       if (lg === 'unknown') r.notes.push('資料庫查無，請確認名稱');
       if (lg === 'check') r.notes.push('是否法定待確認');
@@ -294,7 +294,7 @@ function compute(cs, S, CH) {
 
   if (big) {
     rows.forEach(function (r) {
-      var t = r.tier.key;
+      var t = r.tier.key; r.mode = r.ratio === null ? 'nodata' : 'tier';
       if (t === 'pel') setN(r, 3, 6);
       else if (t === 'half') setN(r, 6, 6);
       else if (t === 'tenth') setN(r, 6, S.mid);
@@ -323,16 +323,16 @@ function compute(cs, S, CH) {
         });
         ms.forEach(function (r) {
           if (r === best) {
-            setN(r, 6, 6);
+            setN(r, 6, 6); r.mode = ms.length > 1 ? 'best' : 'low1';
             r.notes.push(ms.length > 1 ? ('同組同項目濃度最高' + (r.tied ? '（並列，取樣本較少者）' : '')) : '');
           } else {
-            r.skip = true; r.n = 0; r.freq = 6;
+            r.skip = true; r.n = 0; r.freq = 6; r.mode = 'skip'; r.rep = best.seg; r.repRatio = best.ratio;
             r.notes.push('同組同項目免測，由 ' + best.seg + ' 代表');
           }
         });
       } else {
         ms.forEach(function (r) {
-          var t = r.tier.key;
+          var t = r.tier.key; r.mode = r.ratio === null ? 'nodata' : ((t === 'low' || t === 'tenth') ? 'pending' : 'tier');
           if (t === 'pel') setN(r, 3, 6); else setN(r, 6, 6);
           if (t === 'low' || t === 'tenth') r.notes.push('同組有 SEG ≥1/2 PEL，暫比照測6個，待確認');
           if (t === 'na') r.notes.push('缺濃度，暫以6個計');
@@ -695,6 +695,114 @@ function makeSay(R,G){
   }
   return L.join('\n');
 }
+
+/* ---------- 客戶調整說明 Word ---------- */
+var ADJ_RF='<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="標楷體" w:cs="Times New Roman"/>';
+function xe(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function wRun(t,o){o=o||{};var sz=o.sz||24;return'<w:r><w:rPr>'+ADJ_RF+(o.b?'<w:b/>':'')+'<w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/>'+(o.color?'<w:color w:val="'+o.color+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xe(t)+'</w:t></w:r>'}
+function wPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?120:o.after)+'" w:line="'+(o.line||360)+'" w:lineRule="auto"/>'+(o.ind?'<w:ind w:left="400" w:hanging="240"/>':'')+'<w:jc w:val="'+(o.jc||'both')+'"/></w:pPr>'+wRun(t,o)+'</w:p>'}
+function wCell(w,lines,o){o=o||{};return'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'<w:vAlign w:val="'+(o.fill?'center':'top')+'"/></w:tcPr>'+lines.map(function(t){return wPara(t,{sz:22,b:!!o.fill,line:300,after:0,jc:o.fill?'center':(o.jc||'both')})}).join('')+'</w:tc>'}
+var CRCT=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+function crc32(u){var c=0xFFFFFFFF;for(var i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
+function zipStore(files){
+  var enc=new TextEncoder(),parts=[],cd=[],off=0;
+  function u16(v){return[v&255,(v>>8)&255]}function u32(v){return[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255]}
+  files.forEach(function(f){
+    var nm=enc.encode(f.name),d=enc.encode(f.data),crc=crc32(d);
+    var lh=[].concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0));
+    parts.push(new Uint8Array(lh),nm,d);
+    cd.push([].concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off)),Array.from(nm));
+    off+=lh.length+nm.length+d.length});
+  var cdLen=0;cd.forEach(function(a){cdLen+=a.length});
+  var end=[].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdLen),u32(off),u16(0));
+  return new Blob(parts.concat(cd.map(function(a){return new Uint8Array(a)}),[new Uint8Array(end)]),{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'})
+}
+function adjReason(r,S){
+  var pct=fmtPct(r.ratio),cn=String(r.conc==null?'':r.conc).trim();
+  var judge='判定濃度 '+cn+' '+r.unit+'，為容許濃度（'+r.pel+' '+r.unit+'）的 '+pct+(r.src!=='x95'?'（暫用單次結果）':'')+'。';
+  var nt=(r.notes||[]).join('|'),pp='';
+  if(/3～9人/.test(nt))pp='另本族群勞工 '+r.people+' 人（3 人以上未達 10 人），依公告但書至少為 3 個樣本，故本次為 '+r.n+' 個。';
+  else if(/未達3人/.test(nt))pp='另本族群勞工 '+r.people+' 人（未達 3 人），依公告但書全部勞工採樣，故本次為 '+r.n+' 個。';
+  var personal=/區域/.test(r.method||'')?' 公告要求採樣結果須能代表族群之個人暴露，116 年起本項目需改為個人採樣。':'';
+  var m=r.mode,fq,txt;
+  var lt=S.big?'貴公司勞工人數 100 人以上。':'貴公司勞工人數未達 100 人。';
+  if(m==='nodata'){fq='初始採樣';txt='本項目尚無可用的歷年監測數據。依公告，每一相似暴露族群之每一監測項目須先完成初始採樣，至少 6 個樣本，之後再依結果決定定期監測頻率。'+(pp?' '+pp:'')}
+  else if(m==='skip'){fq='免測（附表之註）';txt=judge+lt+'且本項目各族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群（'+r.rep+'，'+fmtPct(r.repRatio)+'），本族群本次免測。'}
+  else if(m==='best'){fq='每 6 個月';txt=judge+lt+'且本項目各相似暴露族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群；本族群為最高者，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
+  else if(m==='low1'){fq='每 6 個月';txt=judge+lt+'本項目濃度低於容許標準的 1/2，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
+  else if(m==='pending'){fq='每 6 個月（暫）';txt=judge+'本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，暫以 '+r.n+' 個樣本計，需個案判定。'+(pp?' '+pp:'')}
+  else{fq='每 '+r.freq+' 個月';txt=judge+lt+'屬「'+r.tier.label+'」，依公告每 '+r.freq+' 個月監測一次，每次 '+r.n+' 個樣本。'+(pp?' '+pp:'')}
+  return{fq:fq,txt:txt+personal}
+}
+function buildAdjDocx(R,G){
+  var S=R.sum,now=new Date(),roc=(now.getFullYear()-1911)+' 年 '+(now.getMonth()+1)+' 月 '+now.getDate()+' 日';
+  var cname=(state.name||'').trim()||'（客戶名稱）';
+  var rows=R.rows.slice().sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
+  var pending=rows.filter(function(r){return r.mode==='pending'});
+  var nNo=rows.filter(function(r){return r.mode==='nodata'}).length;
+  var skipItems=[];rows.forEach(function(r){if(r.mode==='skip'&&skipItems.indexOf(r.item)<0)skipItems.push(r.item)});
+  var nPro=rows.filter(function(r){return !r.skip&&/未達3人|3～9人/.test((r.notes||[]).join('|'))}).length;
+  var nPers=rows.filter(function(r){return !r.skip&&/區域/.test(r.method||'')}).length;
+  var nPel=rows.filter(function(r){return !r.skip&&r.freq===3}).length;
+  var kp=R.keep;var stl=kp.filter(function(k){return /短時間/.test(k.why||'')});
+  var noise=kp.filter(function(k){return /噪音/.test(k.item)&&!/短時間/.test(k.why||'')});
+  var otherPhys=kp.filter(function(k){return k.why==='物理性，維持現況'&&!/噪音/.test(k.item)});
+  var nonlegal=kp.filter(function(k){return /非法定|依場所/.test(k.why||'')});
+  var B=[];
+  if(!G.complete)B.push(wPara('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】',{sz:22,color:'C0392B',jc:'center',b:true}));
+  B.push(wPara('作業環境監測點數調整說明',{sz:36,b:true,color:'12355B',jc:'center',after:60}));
+  B.push(wPara(cname,{sz:28,b:true,jc:'center',after:40}));
+  B.push(wPara('安平技術顧問有限公司　'+roc,{sz:22,color:'4A5868',jc:'center',after:240}));
+  var H=function(t){B.push(wPara(t,{sz:26,b:true,color:'12355B',keep:true,before:200,after:80}))};
+  H('一、調整依據');
+  B.push(wPara('勞動部 115 年 11 月 19 日勞職授字第1150254044A號公告「雇主應實施作業環境監測之作業場所應監測對象、採樣數量及頻率等事項」，自 116 年 1 月 1 日施行。監測改以「相似暴露族群」為單位：每一族群之每一監測項目須先完成初始採樣（至少 6 個樣本），之後依事業單位勞工人數及暴露濃度級距，決定定期監測頻率與樣本數；族群勞工 3 人以上未達 10 人者至少 3 個樣本，未達 3 人者全部勞工採樣。'));
+  H('二、貴公司適用情形');
+  var tot=parseFloat(state.total)||0;
+  B.push(wPara('貴公司勞工人數 '+(state.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+(pending.length?'（另 '+pending.length+' 項待確認）':'')+'。'));
+  var bl=[];
+  if(nNo)bl.push(nNo+' 個項目尚無數據，需先完成初始採樣（每項目 6 個樣本）');
+  if(skipItems.length)bl.push(skipItems.length+' 個項目（'+skipItems.join('、')+'）依附表之註只測濃度最高族群，其餘族群本次免測');
+  if(nPel)bl.push(nPel+' 個項目濃度達容許標準以上，監測頻率縮短為每 3 個月');
+  if(nPro)bl.push('族群人數未達 10 人者，依公告但書調整樣本數');
+  if(nPers)bl.push('區域採樣項目於 116 年起需改為個人採樣');
+  if(stl.length)bl.push(uqA(stl.map(function(k){return k.item})).join('、')+'因 STEL 短時間採樣不列為新制法規規範，照原樣點數採樣');
+  if(nonlegal.length)bl.push(uqA(nonlegal.map(function(k){return k.item})).join('、')+'不在新制規範內，維持現況點數');
+  if(otherPhys.length)bl.push(uqA(otherPhys.map(function(k){return k.item})).join('、')+'等物理性項目維持現況點數');
+  if(bl.length){B.push(wPara('主要變動：',{after:40}));bl.forEach(function(t){B.push(wPara('・'+t,{ind:true,after:40}))})}
+  H('三、各項目調整說明');
+  var W=[1300,1300,1000,1050,4988];
+  var hd=['SEG／作業場所','監測項目','點數|上次→本次','監測頻率','調整原因'];
+  var T='<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(b){return'<w:'+b+' w:val="single" w:sz="4" w:color="000000"/>'}).join('')+'</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+W.map(function(w){return'<w:gridCol w:w="'+w+'"/>'}).join('')+'</w:tblGrid>';
+  T+='<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'+hd.map(function(t,i){return wCell(W[i],t.split('|'),{fill:'D9E2EC'})}).join('')+'</w:tr>';
+  rows.forEach(function(r){var a=adjReason(r,S);
+    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[r.seg].concat(r.segName?[r.segName]:[]))+wCell(W[1],[r.item])+wCell(W[2],[r.cur+' → '+r.n],{jc:'center'})+wCell(W[3],[a.fq])+wCell(W[4],[a.txt])+'</w:tr>'});
+  kp.forEach(function(k){if(/噪音/.test(k.item)&&!/短時間/.test(k.why||''))return;if(k.why==='物理性，維持現況')return;
+    var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':'本項目依場所判斷，維持現況點數。');
+    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[3],['維持現況'])+wCell(W[4],[why])+'</w:tr>'});
+  T+='</w:tbl>';B.push(T);
+  var pl=[];
+  pending.forEach(function(r){pl.push(r.seg+' '+(r.segName||'')+'｜'+r.item+'：本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，需個案判定。')});
+  noise.forEach(function(k){pl.push(k.seg+' '+(k.segName||'')+'｜'+k.item+'：噪音是否適用本公告附表之頻率與點數，尚待主管機關確認，暫維持原規劃。')});
+  if(pl.length){H('四、待確認事項');pl.forEach(function(t){B.push(wPara('・'+t,{ind:true,after:40}))})}
+  B.push(wPara('註：本次以簡易暴露濃度判定；116 年起完成暴露評估報告後，將依評估結果重新檢討級距與頻率。',{sz:20,color:'4A5868',before:160}));
+  var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  var HD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  var doc=HD+'<w:document '+NS+'><w:body>'+B.join('')+'<w:sectPr><w:footerReference w:type="default" r:id="rIdF1"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
+  var fr=function(t){return'<w:r><w:rPr>'+ADJ_RF+'<w:sz w:val="18"/><w:szCs w:val="18"/></w:rPr>'+t+'</w:r>'};
+  var fld=function(c){return fr('<w:fldChar w:fldCharType="begin"/>')+fr('<w:instrText xml:space="preserve"> '+c+' </w:instrText>')+fr('<w:fldChar w:fldCharType="separate"/>')+fr('<w:t>1</w:t>')+fr('<w:fldChar w:fldCharType="end"/>')};
+  var ftr=HD+'<w:ftr '+NS+'><w:p><w:pPr><w:jc w:val="center"/></w:pPr>'+fr('<w:t xml:space="preserve">安平技術顧問有限公司　第 </w:t>')+fld('PAGE')+fr('<w:t xml:space="preserve"> 頁，共 </w:t>')+fld('NUMPAGES')+fr('<w:t xml:space="preserve"> 頁</w:t>')+'</w:p></w:ftr>';
+  var sty=HD+'<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr>'+ADJ_RF+'<w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="en-US" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+  var ct=HD+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>';
+  var rels=HD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+  var drels=HD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>';
+  return zipStore([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:sty},{name:'word/footer1.xml',data:ftr},{name:'word/_rels/document.xml.rels',data:drels}]);
+}
+function uqA(a){return a.filter(function(v,i,x){return x.indexOf(v)===i})}
+$('#dlAdj').onclick=function(){
+  var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}
+  var blob=buildAdjDocx(R,G);var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download=((state.name||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_作業環境監測點數調整說明.docx';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)};
+
 $('#sayStyle').onchange=function(){sayDirty=false;update(true)};
 $('#say').oninput=function(){sayDirty=true};
 $('#regen').onclick=function(){sayDirty=false;update(true)};
