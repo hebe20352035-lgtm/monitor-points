@@ -121,6 +121,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
       <button class="btn sm" id="addSeg">＋ SEG</button>
       <button class="btn sm" id="openImp">貼上匯入</button>
       <button class="btn sm" id="openConc">貼上濃度</button>
+      <button class="btn sm" id="openStat">匯入統計表</button><input type="file" id="statFile" accept=".xlsx,.docx,.csv,.txt" hidden>
       <details class="more"><summary class="btn sm">更多 ▾</summary><div class="morebox">
         <button class="btn sm" id="exp">匯出檔案</button>
         <button class="btn sm" id="impFileBtn">匯入檔案</button><input type="file" id="impFile" accept=".json" hidden>
@@ -1022,6 +1023,80 @@ function applyConc(text){
       done=true});});
     if(done)rep.ok++;else rep.miss.push(chem+' @ '+place)});
   return rep}
+
+
+/* ---------- 匯入自行整理的統計表（xlsx / docx / csv） ---------- */
+async function xlsxGrids(buf){
+  var ss=[];
+  try{var sx=await unzipEntry(buf,'xl/sharedStrings.xml');var sd=new DOMParser().parseFromString(sx,'application/xml');
+    Array.prototype.forEach.call(sd.getElementsByTagName('si'),function(si){var s='';Array.prototype.forEach.call(si.getElementsByTagName('t'),function(x){s+=x.textContent});ss.push(s)})}catch(e){}
+  var names=(await unzipList(buf)).filter(function(n){return /^xl\/worksheets\/sheet\d+\.xml$/.test(n)}).sort();
+  var out=[];
+  for(var q=0;q<names.length;q++){
+    var xml=await unzipEntry(buf,names[q]);var d=new DOMParser().parseFromString(xml,'application/xml');var g=[];
+    Array.prototype.forEach.call(d.getElementsByTagName('row'),function(rw){
+      if(rw.getAttribute('hidden')==='1'||rw.getAttribute('hidden')==='true')return;
+      Array.prototype.forEach.call(rw.getElementsByTagName('c'),function(c){
+        var ref=c.getAttribute('r')||'',m=ref.match(/^([A-Z]+)(\d+)$/);if(!m)return;
+        var col=0;for(var i=0;i<m[1].length;i++)col=col*26+(m[1].charCodeAt(i)-64);col--;var row=parseInt(m[2])-1;
+        var tp=c.getAttribute('t'),v=c.getElementsByTagName('v')[0],val='';
+        if(tp==='s'&&v)val=ss[parseInt(v.textContent)]||'';
+        else if(tp==='inlineStr')val=(c.getElementsByTagName('t')[0]||{textContent:''}).textContent;
+        else if(v)val=v.textContent;
+        while(g.length<=row)g.push([]);var r=g[row];while(r.length<=col)r.push('');r[col]=String(val).trim()})});
+    out.push(g.map(function(r){return r||[]}))}
+  return out}
+function csvGrid(txt){return txt.split(/\r?\n/).filter(function(l){return l.trim()}).map(function(l){return l.indexOf('\t')>=0?l.split('\t'):l.split(/[,，]/)}).map(function(r){return r.map(function(c){return c.trim()})})}
+function gridToStat(g){
+  var out=[];
+  for(var h=0;h<g.length;h++){
+    var hd=g[h].map(normT);
+    var cs=findCol(hd,[/SEG|相似暴露族群|代號|代碼/]),cn=findCol(hd,[/化學品|品名|項目|物質/]),cv=findCol(hd,[/第95|X95|95百分位|百分位/]),cu=findCol(hd,[/^單位$/]);
+    if(cv<0)cv=findCol(hd,[/濃度/]);
+    if(cs<0||cn<0||cv<0)continue;
+    var lastSeg='';
+    for(var r=h+1;r<g.length;r++){
+      var row=g[r];var sm=normT(row[cs]).match(/SEG\d+/i);if(sm)lastSeg=sm[0].toUpperCase();else if(normT(row[cs]))continue;
+      var nm=String(row[cn]||'').trim();if(!nm||!lastSeg)continue;
+      var v=String(row[cv]||'').replace(/[<＜\s]/g,'');if(!/^\d*\.?\d+$/.test(v))continue;v=String(parseFloat(parseFloat(v).toPrecision(6)));
+      out.push({seg:lastSeg,name:nm,unit:cu>=0?String(row[cu]||'').trim():'',x95:v})}
+    if(out.length)break}
+  return out}
+function applyStatTable(rows){
+  var rep={ok:0,notes:[]};
+  rows.forEach(function(sr){
+    var sg=state.segs.filter(function(g){return String(g.code).toUpperCase()===sr.seg})[0];
+    if(!sg){rep.notes.push(sr.seg+' '+sr.name+'：系統沒有這個 SEG');return}
+    var hits=sg.items.filter(function(i){return i.name&&statMatch(i.name,sr.name)}),alt='';
+    if(!hits.length){
+      var a2=[];state.segs.forEach(function(g2){if(g2===sg)return;var h2=g2.items.filter(function(i){return i.name&&statMatch(i.name,sr.name)});if(h2.length)a2.push({g:g2,h:h2})});
+      if(a2.length===1){hits=a2[0].h;alt=a2[0].g.code}
+      else{rep.notes.push(sr.seg+' '+sr.name+'：找不到對應的化學品');return}}
+    hits.forEach(function(i){
+      i.conc=sr.x95;i.src='x95';
+      if(/mg/i.test(sr.unit))i.unit='mg/m³';else if(/ppm/i.test(sr.unit))i.unit='ppm';
+      if(alt)i.sflag={from:sr.seg,to:alt};else if(i.sflag)delete i.sflag;
+      if(i.flag==='name')delete i.flag;
+      rep.ok++;
+      if(alt)rep.notes.push('統計表寫在 '+sr.seg+'「'+sr.name+'」，系統這項在 '+alt+'，已先填入，請確認')})});
+  return rep}
+$('#openStat').onclick=function(){$('#statFile').click()};
+$('#statFile').onchange=async function(e){
+  var f=e.target.files[0];if(!f)return;e.target.value='';
+  var rows=[],msg='';
+  try{
+    var buf=await f.arrayBuffer(),grids=[];
+    if(/\.xlsx$/i.test(f.name))grids=await xlsxGrids(buf);
+    else if(/\.docx$/i.test(f.name))grids=(await docxBlocks(buf)).map(function(b){return b.grid});
+    else grids=[csvGrid(new TextDecoder('utf-8').decode(buf))];
+    for(var i=0;i<grids.length;i++){var r=gridToStat(grids[i]);if(r.length){rows=r;break}}
+  }catch(err){msg='檔案讀取失敗：'+err.message}
+  var h='<div class="card" style="border-color:var(--accent)"><div class="row" style="justify-content:space-between"><b>統計表匯入</b><button class="btn sm" id="repClose">關閉</button></div><div class="hint">'+esc(f.name)+'</div>';
+  if(!rows.length){h+='<div class="note" style="color:#C0392B">'+(msg||'找不到統計表。表頭需要有「SEG」「化學品」「第95百分位（或濃度）」三欄。')+'</div>'}
+  else{var r2=applyStatTable(rows);renderSegs();save();update(true);
+    h+='<div>讀到 '+rows.length+' 列，填入 '+r2.ok+' 項</div>';
+    if(r2.notes.length)h+='<div class="note" style="color:#C0392B"><ul style="margin:4px 0 0 18px;padding:0">'+r2.notes.map(function(s){return'<li>'+esc(s)+'</li>'}).join('')+'</ul></div>'}
+  $('#impReport').innerHTML=h+'</div>';$('#repClose').onclick=function(){$('#impReport').innerHTML=''}};
 
 $('#openConc').onclick=function(){$('#concModal').classList.add('show')};
 $('#concClose').onclick=function(){$('#concModal').classList.remove('show')};
