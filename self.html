@@ -150,7 +150,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
         <div class="scroll"><table class="res" id="resTbl"></table></div>
       </details>
       <details class="fold" id="sayBox"><summary>客戶說明</summary>
-        <div class="row" style="justify-content:flex-end;margin:6px 0"><button class="btn sm" id="forceSay" hidden>仍產生暫估版</button><button class="btn sm" id="regen">重新產生</button><button class="btn sm pri" id="copySay">複製</button></div>
+        <div class="row" style="justify-content:flex-end;margin:6px 0"><select id="sayStyle" style="max-width:62%"><option value="1">版本1　親切說明</option><option value="2">版本2　語氣委婉</option><option value="3">版本3　法規如此，只能遵守</option><option value="4">版本4　回覆客戶抱怨點數多、金額變動大</option><option value="5">版本5　精簡版（LINE）</option></select><button class="btn sm" id="forceSay" hidden>仍產生暫估版</button><button class="btn sm" id="regen">重新產生</button><button class="btn sm pri" id="copySay">複製</button></div>
         <textarea class="say" id="say"></textarea>
       </details>
     </div>
@@ -277,7 +277,7 @@ function compute(cs, S, CH) {
       if (!it.name || !String(it.name).trim()) return;
       var name = String(it.name).trim();
       function mkKeep(why) { var c0 = parseFloat(it.cur) || 0; keep.push({ seg: g.code || '', segName: g.name || '', item: name, cur: c0, n: c0, freq: 6, keep: true, why: why, method: it.method || '' }); }
-      if (/短時間/.test(it.method || '')) { mkKeep('短時間採樣，維持現況'); return; }
+      if (/短時間/.test(it.method || '')) { mkKeep('STEL 短時間採樣，不列入新制，照原樣點數'); return; }
       if (PHYS.test(name)) { phys.push(g.code + ' ' + name); mkKeep('物理性，維持現況'); return; }
       var ch = findChem(idx, name);
       var lg = legalOf(ch);
@@ -474,7 +474,7 @@ function itemRow(g,it,gi,ii){
   return'<tr data-i="'+ii+'" class="'+kd+'">'+
   '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+'</td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
-  (gray?'<td class="na" colspan="2">不需填濃度，維持現況點數</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字">'+(it.sflag?'<span class="fn">統計表寫在 '+esc(it.sflag.from)+'<button data-act="okS">確認無誤</button></span>':'')+'</td>'+
+  (gray?'<td class="na" colspan="2">'+(/短時間/.test(it.method||'')?'STEL 短時間採樣不列入新制法規，照原樣點數採樣':'不需填濃度，維持現況點數')+'</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字">'+(it.sflag?'<span class="fn">統計表寫在 '+esc(it.sflag.from)+'<button data-act="okS">確認無誤</button></span>':'')+'</td>'+
   '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>')+
   '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
   '<td class="adv-col"><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
@@ -602,21 +602,49 @@ function update(regen){
 }
 function makeSay(R,G){
   var S=R.sum;if(!R.rows.length&&!R.keep.length)return'';
+  var st=parseInt(($('#sayStyle')||{}).value)||1;
   var L=[];
   if(G&&!G.complete)L.push('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】');
-  var nm='貴廠',d=S.final-S.cur;
-  L.push('您好，勞動部的新修法從 116 年 1 月 1 日開始上路，作業環境監測的樣本數要改依勞工人數和各區濃度級距重新計算，所以這次'+(d>0?'點數會比以往多一些，這是法規調整，不是我們額外加價。':'點數會依新制重新核算。'));
-  L.push('我們已經依'+nm+'歷次的監測結果逐項評估，用法規允許的最少點數來報價，每輪監測由現行 '+S.cur+' 點調整為 '+S.final+' 點。');
-  if(S.big)L.push('濃度偏低的項目，我們都以最低樣本數處理，只有濃度較高的項目才需要加點。');
-  else L.push('同一類作業的相同項目，法規允許只測濃度最高的那一區，這部分我們也幫您併在一起，省掉重複採樣。');
-  var hi=R.rows.filter(function(r){return r.tier.key==='pel'&&!r.skip}).map(function(r){return r.seg+' '+r.item});
-  if(hi.length)L.push('另外 '+hi.join('、')+' 的濃度已達容許標準，依新制要每 3 個月監測一次，這部分會比較有感，也建議一起評估改善。');
-  var kp=R.keep.filter(function(k){return k.n>0}).map(function(k){return k.item});
-  kp=kp.filter(function(v,i,a){return a.indexOf(v)===i});
-  if(kp.length)L.push(kp.join('、')+' 不在新制規範內，點數維持不變。');
-  L.push('實際採樣內容我們會再跟您確認，有任何疑問都歡迎隨時跟我們說。');
+  var d=S.final-S.cur,up=d>0;
+  var uq=function(a){return a.filter(function(v,i,x){return x.indexOf(v)===i})};
+  var hi=uq(R.rows.filter(function(r){return r.tier.key==='pel'&&!r.skip}).map(function(r){return r.seg+' '+r.item}));
+  var stl=uq(R.keep.filter(function(k){return k.n>0&&/短時間/.test(k.why||'')}).map(function(k){return k.item}));
+  var kp=uq(R.keep.filter(function(k){return k.n>0&&!/短時間/.test(k.why||'')}).map(function(k){return k.item}));
+  var P=S.cur+' 點調整為 '+S.final+' 點';
+  var same=S.big?'濃度偏低的項目，我們都以最低樣本數處理，只有濃度較高的項目才需要加點。':'同一類作業的相同項目，法規允許只測濃度最高的那一區，這部分我們也幫您併在一起，省掉重複採樣。';
+  var sHi=hi.length?hi.join('、')+' 的濃度已達容許標準，依新制須每 3 個月監測一次，這部分會比較有感。':'';
+  var sSt=stl.length?stl.join('、')+'因 STEL 短時間採樣不列為新制法規規範，故照原樣點數採樣。':'';
+  var sKp=kp.length?kp.join('、')+'不在新制規範內，點數維持不變。':'';
+  var add=function(x){if(x)L.push(x)};
+  if(st===1){
+    L.push('您好，勞動部的新修法從 116 年 1 月 1 日開始上路，作業環境監測的樣本數要改依勞工人數和各區濃度級距重新計算，所以這次'+(up?'點數會比以往多一些，這是法規調整，不是我們額外加價。':'點數會依新制重新核算。'));
+    L.push('我們已經依貴廠歷次的監測結果逐項評估，用法規允許的最少點數來報價，每輪監測由現行 '+P+'。');
+    add(same);add(sHi?'另外 '+sHi+'也建議一起評估改善。':'');add(sSt);add(sKp);
+    L.push('實際採樣內容我們會再跟您確認，有任何疑問都歡迎隨時跟我們說。');
+  }else if(st===2){
+    L.push('您好，謝謝貴廠一直以來的配合。這次想先跟您說明一下，因為勞動部新修法 116 年 1 月 1 日起實施，作業環境監測的測點要依勞工人數和濃度級距重新計算，所以報價的測點數有些調整，每輪由現行 '+P+'。');
+    L.push('我們評估時已盡量以法規允許的最少點數處理。'+same);
+    add(sHi);add(sSt);add(sKp);
+    L.push('若您對哪個項目有疑問，我們很樂意逐項說明，也再麻煩您參考看看，謝謝。');
+  }else if(st===3){
+    L.push('您好，這次測點數'+(up?'增加':'調整')+'，是因為勞動部新修法自 116 年 1 月 1 日起實施，監測的樣本數與頻率改依勞工人數及濃度級距認定。這是法規的強制規定，我們也沒有調整的空間，只能依規定辦理。');
+    L.push('在法規範圍內，我們已用允許的最少點數評估，每輪由現行 '+P+'。'+same);
+    add(sHi);add(sSt);add(sKp);
+    L.push('若未依新制規定辦理，會有不符合法規的風險，所以還是建議依此規劃。有任何疑問，我們再向您說明。');
+  }else if(st===4){
+    L.push('您好，了解貴廠對測點變多、金額變動較大的疑慮，我們也能體會預算上的壓力。');
+    L.push('這次的變動並不是我們調整報價方式，而是勞動部新修法自 116 年 1 月 1 日起，監測樣本數改依勞工人數和濃度級距計算，每輪測點由現行 '+P+(up?'，增加 '+d+' 點':'')+'，金額的變化主要來自測點數。');
+    L.push('我們已逐項依貴廠歷次監測結果，以法規允許的最少點數報價。'+same);
+    add(sHi);add(sSt);add(sKp);
+    L.push('報價表中每個項目的測點數都列得很清楚，若對哪一項有疑問，我們可以逐項對照法規說明依據，也歡迎隨時跟我們討論。');
+  }else{
+    L.push('您好，因勞動部新修法 116/1/1 起實施，監測測點改依人數與濃度級距計算，每輪由 '+P+'，我們已用法規允許的最少點數報價。');
+    add(sSt?sSt:'');
+    L.push('有疑問再跟我們說，我們逐項說明。');
+  }
   return L.join('\n');
 }
+$('#sayStyle').onchange=function(){sayDirty=false;update(true)};
 $('#say').oninput=function(){sayDirty=true};
 $('#regen').onclick=function(){sayDirty=false;update(true)};
 $('#forceSay').onclick=function(){forceSay=true;sayDirty=false;update(true)};
