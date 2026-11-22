@@ -577,7 +577,8 @@ function renderGrpPanel(R){
       if(mem.length<2){warn.push('組 '+c+' 只有 '+mem[0].g.code+'，沒有作用，請再勾一個 SEG');return}
       var gr=rs.filter(function(r){return r.grp===c});var sk=gr.filter(function(r){return r.skip});
       if(sk.length)msgs.push('組 '+c+'：只測 '+gr.filter(function(r){return !r.skip}).map(function(r){return r.seg}).join('、')+'，'+sk.map(function(r){return r.seg}).join('、')+' 免測');
-      else warn.push('組 '+c+'：有 SEG ≥1/2 PEL 或缺濃度，不能併，各自採樣');
+      else{var miss=gr.filter(function(r){return r.ratio===null}).map(function(r){return r.seg}),hi=gr.filter(function(r){return r.ratio!==null&&r.ratio>=0.5}).map(function(r){return r.seg});
+        warn.push('組 '+c+'：不能併，各自採樣。原因：'+(miss.length?miss.join('、')+' 還沒有濃度（請填濃度或匯入統計表）':'')+(miss.length&&hi.length?'；':'')+(hi.length?hi.join('、')+' 濃度 ≥1/2 容許標準':''))}
     });
     if(msgs.length)h+='<div style="margin-top:4px;color:#2E7D4F;font-size:14px">'+msgs.map(esc).join('<br>')+'</div>';
     if(warn.length)h+='<div style="margin-top:4px;color:#B54708;font-size:14px">⚠ '+warn.map(esc).join('<br>⚠ ')+'</div>';
