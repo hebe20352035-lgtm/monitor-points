@@ -82,7 +82,7 @@ details.more{position:relative}details.more summary{list-style:none;display:inli
 .morebox .btn{text-align:left}
 .total{display:flex;gap:22px;flex-wrap:wrap;margin:6px 0 4px}.total div{display:flex;flex-direction:column}.total b{font-size:34px;line-height:1.1;color:var(--accent)}.total span{font-size:12px;color:var(--ink2)}
 details.fold{margin-top:10px;border-top:1px solid var(--line);padding-top:8px}details.fold summary{cursor:pointer;color:var(--ink2);font-size:13px}
-table.res.fin{min-width:420px}table.res.fin td.big{font-size:16px;font-weight:700;text-align:center}
+table.res.fin{min-width:420px}input.qe{font:inherit;padding:4px 6px;border:1px solid var(--line,#cfd8d2);border-radius:6px;background:#fff}input.qe.ed{background:#fff6c8;border-color:#e0b400}table.res.fin td.big{font-size:16px;font-weight:700;text-align:center}
 input.bad,select.bad{border-color:#C0392B!important;background:#FDECEA!important}
 .fn{display:block;font-size:11px;color:#C0392B;line-height:1.3;margin-top:2px}.fn.soft{color:var(--ink3)}
 .fn button{border:1px solid #C0392B;background:#fff;color:#C0392B;border-radius:6px;font-size:11px;padding:0 6px;margin-left:4px;cursor:pointer}
@@ -145,7 +145,8 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
       <div class="scroll" style="margin-top:8px"><table class="res fin" id="finTbl"></table></div>
       <div id="extraLine" class="note"></div>
       <h3 style="margin:16px 0 6px;font-size:15px">各化學品報價數量</h3>
-      <div class="row" style="margin-bottom:6px"><label class="f" style="width:200px">頻率（次）<select id="qfreq"><option value="1">1 次＝每六個月報價</option><option value="2">2 次＝年約</option><option value="6">6 次＝三年約</option></select></label><button class="btn sm" id="copyChem" style="align-self:flex-end">複製</button></div>
+      <div class="row" style="margin-bottom:6px"><label class="f" style="width:200px">頻率（次）<select id="qfreq"><option value="1">1 次＝每六個月報價</option><option value="2">2 次＝年約</option><option value="6">6 次＝三年約</option></select></label><button class="btn sm" id="copyChem" style="align-self:flex-end">複製</button><button class="btn sm" id="qReset" style="align-self:flex-end;display:none">還原為系統計算</button></div>
+      <div class="hint" style="margin-bottom:6px">品名、數量可直接修改（黃底＝已改過）；報價單、複製會用修改後的內容。</div>
       <div class="scroll"><table class="res fin" id="chemTbl"></table></div>
       <details class="fold"><summary>計算細節（級距、頻率、與現況對照）</summary>
         <div id="warnLine" class="note"></div>
@@ -600,10 +601,12 @@ function update(regen){
   var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});var q=parseInt($('#qfreq').value)||1;var tot=0,h3='';
   if(names.length){
     h3='<thead><tr><th colspan="5" style="text-align:left;background:#fff;border-bottom:2px solid var(--accent)">公司名稱：'+esc(state.name||'（未填）')+''+'</th></tr><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
-    names.forEach(function(nm,i){var c=Math.round(agg[nm]*10)/10;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td>'+esc(nm)+'</td><td class="big">'+c+'</td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
+    var items=qItems(names,agg,state);var anyE=false;
+    items.forEach(function(it,i){var c=it.n;if(it.en||it.em)anyE=true;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td><input class="qe'+(it.em?' ed':'')+'" data-qk="'+esc(it.key)+'" data-qf="name" value="'+esc(it.name)+'" style="width:100%;min-width:130px"></td><td class="big"><input class="qe'+(it.en?' ed':'')+'" type="number" step="0.1" min="0" data-qk="'+esc(it.key)+'" data-qf="n" value="'+c+'" style="width:70px;text-align:center;font-weight:700"></td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
+    $('#qReset').style.display=anyE?'':'none';
     h3+='<tr><td colspan="2"><b>合計</b></td><td class="num"><b>'+Math.round(tot/q*10)/10+'</b></td><td class="num">'+q+'</td><td class="num"><b>'+Math.round(tot*10)/10+'</b></td></tr></tbody>';
   }
-  $('#chemTbl').innerHTML=h3;window._C={names:names,agg:agg,q:q,tot:tot};
+  if(!names.length)$('#qReset').style.display='none';$('#chemTbl').innerHTML=h3;window._C={names:names,agg:agg,q:q,tot:tot,items:qItems(names,agg,state)};
   var rows=R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:(a.seg<b.seg?-1:1)});
   var h2='<thead><tr><th>項目</th><th>SEG／區域</th><th>人數</th><th>濃度（佔PEL）</th><th>級距</th><th>頻率</th><th class="num">現況</th><th class="num">新制</th><th class="num">增減</th><th>備註</th></tr></thead><tbody>';
   rows.forEach(function(r){
@@ -825,6 +828,7 @@ function qTbl(W,head,rows,o){o=o||{};var tw=W.reduce(function(a,b){return a+b},0
   if(head)T+='<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'+head.map(function(h,i){return qCell(W[i],h,{fill:'1F5A46',color:'FFFFFF',b:true,jc:'center'})}).join('')+'</w:tr>';
   rows.forEach(function(r){T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+r.map(function(c,i){return qCell(c.w||W[i],c.t,c)}).join('')+'</w:tr>'});
   return T+'</w:tbl>'}
+function qItems(names,agg,st){var ov=(st&&st.qov)||{};return names.map(function(k){var o=ov[k]||{},a=Math.round(agg[k]*10)/10,hn=o.n!=null&&o.n!==''&&isFinite(o.n),hm=o.name!=null&&o.name!=='';return{key:k,name:hm?o.name:k,n:hn?Math.round(o.n*10)/10:a,auto:a,en:hn,em:hm}})}
 function chemAgg(R,q){
   var fr=finRows(R),agg={};
   fr.forEach(function(r){var k=r.item;if(/噪音/.test(k)&&!/劑量|區域|個人/.test(k))k=/區域/.test(r.method||'')?'區域噪音':'劑量噪音';agg[k]=(agg[k]||0)+r.n});
@@ -853,7 +857,7 @@ function buildQuoteDocx(R,G,st,q){
     {t:'三年測點　'+r1(S.finalYear*30/10)+' 點',b:true,sz:26,jc:'center',fill:'E2EEE8',color:'1F5A46'}]],{none:true,bc:'FFFFFF'}));
   B.push(qPara('一、各化學品報價數量',{sz:26,b:true,color:'1F5A46',keep:true,before:280,after:100}));
   var W1=[900,4238,1500,1500,1500],rows1=[],tot=0;
-  A.names.forEach(function(nm,i){var c=r1(A.agg[nm]);tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
+  qItems(A.names,A.agg,st).forEach(function(it,i){var nm=it.name,c=it.n;tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
   rows1.push([{t:'合計',span:2,w:5138,b:true,fill:'EEF3F0'},{t:String(r1(tot/q)),jc:'center',b:true,fill:'EEF3F0'},{t:String(q),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(tot)),jc:'center',b:true,fill:'EEF3F0'}]);
   B.push(qTbl(W1,['編號','品名','數量（點）','頻率（次）','小計（點）'],rows1));
   B.push(qPara('二、各 SEG 測點數',{sz:26,b:true,color:'1F5A46',keep:true,before:320,after:100}));
@@ -896,7 +900,12 @@ $('#copyTbl').onclick=function(){
   L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,Math.round(R.sum.finalYear*30)/10,''].join('\t'));
   copyText(L.join('\n'),this)};
 $('#qfreq').onchange=function(){update()};
-$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
+$('#chemTbl').addEventListener('change',function(e){var t=e.target;if(!t.getAttribute||!t.getAttribute('data-qk'))return;var k=t.getAttribute('data-qk'),f=t.getAttribute('data-qf'),C=window._C||{},v=t.value.trim();state.qov=state.qov||{};var o=state.qov[k]=state.qov[k]||{};
+  if(f==='name'){if(v===''||v===k)delete o.name;else o.name=v}
+  else{var a=Math.round((C.agg&&C.agg[k]||0)*10)/10;if(v===''||!isFinite(v)||parseFloat(v)<0||Math.round(parseFloat(v)*10)/10===a)delete o.n;else o.n=Math.round(parseFloat(v)*10)/10}
+  if(o.name==null&&o.n==null)delete state.qov[k];save();update()});
+$('#qReset').onclick=function(){delete state.qov;save();update()};
+$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.items.forEach(function(it,i){var nm=it.name,c=it.n;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
 $('#advGrp').onchange=function(){document.body.classList.toggle('advg',this.checked)};
 $('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
@@ -1438,7 +1447,7 @@ function farmFlush(){
   var R=compute(state,SET,CH),G=checkData(state,CH),S=R.sum;
   var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',status:old?old.status:'進行中',note:old?old.note:'',files:old&&old.files?old.files:[],upd:Date.now(),
     state:JSON.parse(JSON.stringify(state)),sayEdit:sayDirty?$('#say').value:'',style:$('#sayStyle').value,say:$('#say').value,
-    quote:$('#chemTbl').innerHTML,fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
+    quote:$('#chemTbl').innerHTML.replace(/<input[^>]*value="([^"]*)"[^>]*>/g,'$1'),fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
     sum:{cur:S.cur,final:S.final,year:Math.round(S.finalYear*10)/10,y3:Math.round(S.finalYear*30)/10,big:S.big,complete:G.complete,count:G.count,total:state.total}};
   if(old&&JSON.stringify(old.state)===JSON.stringify(rec.state)&&old.say===rec.say&&old.name===rec.name)return;
   farmPut(rec);
