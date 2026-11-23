@@ -113,7 +113,6 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <div class="card">
     <div class="row">
       <label class="f" style="flex:1 1 160px;min-width:0">公司名稱<input id="cname" placeholder="例：○○股份有限公司"></label>
-      <label class="f" style="flex:1 1 110px;min-width:0">廠名<input id="cplant" placeholder="例：高雄廠"></label>
       <label class="f" style="width:120px;flex:none">全廠勞工人數<input id="total" type="number" inputmode="numeric" min="0" placeholder="51"></label>
       <span id="bigBadge" class="badge" style="align-self:flex-end;margin-bottom:6px">—</span>
     </div>
@@ -517,8 +516,7 @@ $('#segs').addEventListener('click',function(e){
 });
 $('#addSeg').onclick=function(){state.segs.push(newSeg(state.segs.length+1));renderSegs();save();update(true)};
 $('#cname').oninput=function(){state.name=this.value;save();update(false)};
-$('#cplant').oninput=function(){state.plant=this.value;save();update(false)};
-function fullName(st){var n=((st&&st.name)||'').trim(),p=((st&&st.plant)||'').trim();return p&&n.indexOf(p)<0?(n?n+' '+p:p):n}
+function fullName(st){return((st&&st.name)||'').trim()}
 $('#total').oninput=function(){state.total=this.value;save();update(true)};
 $('#clearAll').onclick=function(){ask('清空目前畫面？（已存入各廠資料夾的紀錄不會刪除）',function(){farmFlush();state={name:'',total:'',segs:[]};syncTop();renderSegs();save();update(true)})};
 
@@ -582,7 +580,7 @@ function update(regen){
   function qGrp(n){if(/局部排氣/.test(n))return 4;if(/二氧化碳/.test(n))return 5;if(/照度|照明/.test(n))return 6;if(/噪音/.test(n))return /區域/.test(n)&&!/劑量|個人/.test(n)?2:1;if(PHYSX.test(n))return 3;return 0}
   var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});var q=parseInt($('#qfreq').value)||1;var tot=0,h3='';
   if(names.length){
-    h3='<thead><tr><th colspan="5" style="text-align:left;background:#fff;border-bottom:2px solid var(--accent)">公司名稱：'+esc(state.name||'（未填）')+'　　廠名：'+esc(state.plant||'（未填）')+'</th></tr><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
+    h3='<thead><tr><th colspan="5" style="text-align:left;background:#fff;border-bottom:2px solid var(--accent)">公司名稱：'+esc(state.name||'（未填）')+''+'</th></tr><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
     names.forEach(function(nm,i){var c=Math.round(agg[nm]*10)/10;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td>'+esc(nm)+'</td><td class="big">'+c+'</td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
     h3+='<tr><td colspan="2"><b>合計</b></td><td class="num"><b>'+Math.round(tot/q*10)/10+'</b></td><td class="num">'+q+'</td><td class="num"><b>'+Math.round(tot*10)/10+'</b></td></tr></tbody>';
   }
@@ -813,8 +811,8 @@ function buildQuoteDocx(R,G,st,q){
   var IW=[1500,3369,1500,3269];
   B.push(qTbl(IW,null,[
     [{t:'公司名稱',b:true,fill:'EEF3F0'},{t:st.name||'—',span:3,w:8138}],
-    [{t:'廠名',b:true,fill:'EEF3F0'},{t:st.plant||'—'},{t:'全廠勞工人數',b:true,fill:'EEF3F0'},{t:(st.total||'—')+' 人'}],
-    [{t:'報價頻率',b:true,fill:'EEF3F0'},{t:qlab},{t:'製表日期',b:true,fill:'EEF3F0'},{t:dt}]
+    [{t:'全廠勞工人數',b:true,fill:'EEF3F0'},{t:(st.total||'—')+' 人'},{t:'報價頻率',b:true,fill:'EEF3F0'},{t:qlab}],
+    [{t:'製表日期',b:true,fill:'EEF3F0'},{t:dt,span:3,w:8138}]
   ]));
   B.push(qPara('',{after:160}));
   var SW=[3212,3213,3213];
@@ -867,12 +865,12 @@ $('#copyTbl').onclick=function(){
   L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,Math.round(R.sum.finalYear*30)/10,''].join('\t'));
   copyText(L.join('\n'),this)};
 $('#qfreq').onchange=function(){update()};
-$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'廠名\t'+(state.plant||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
+$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
 $('#advGrp').onchange=function(){document.body.classList.toggle('advg',this.checked)};
 $('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
 /* ---------- 匯入／匯出 ---------- */
-function syncTop(){$('#cname').value=state.name||'';$('#cplant').value=state.plant||'';$('#total').value=state.total||''}
+function syncTop(){$('#cname').value=state.name||'';$('#total').value=state.total||''}
 $('#openImp').onclick=function(){$('#impModal').classList.add('show')};
 $('#impClose').onclick=function(){$('#impModal').classList.remove('show')};
 function doImport(replace){
@@ -1407,7 +1405,7 @@ function farmFlush(){
   if(!state.fid)state.fid='f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   var a=FARMS,i=a.findIndex(function(x){return x.id===state.fid}),old=i>=0?a[i]:null;
   var R=compute(state,SET,CH),G=checkData(state,CH),S=R.sum;
-  var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',co:state.name||'',plant:state.plant||'',status:old?old.status:'進行中',note:old?old.note:'',upd:Date.now(),
+  var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',status:old?old.status:'進行中',note:old?old.note:'',upd:Date.now(),
     state:JSON.parse(JSON.stringify(state)),sayEdit:sayDirty?$('#say').value:'',style:$('#sayStyle').value,say:$('#say').value,
     quote:$('#chemTbl').innerHTML,fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
     sum:{cur:S.cur,final:S.final,year:Math.round(S.finalYear*10)/10,y3:Math.round(S.finalYear*30)/10,big:S.big,complete:G.complete,count:G.count,total:state.total}};
@@ -1445,7 +1443,7 @@ function renderFarms(){
   el.innerHTML=a.map(function(f){
     var sm=f.sum||{};
     return'<details class="fold farm" data-id="'+f.id+'"'+(opened[f.id]?' open':'')+'><summary><input type="checkbox" data-sel="'+f.id+'"'+(selF[f.id]?' checked':'')+' title="勾選後只匯出勾選的廠"> <b>'+esc(f.name)+'</b> <span class="badge">'+esc(f.status)+'</span> '+
-      (sm.complete?'':'<span class="badge warn">待補 '+(sm.count||0)+' 項</span> ')+'<span class="hint">'+(sm.total||'—')+' 人｜每輪 '+sm.cur+' → '+sm.final+'｜'+fdate(f.upd)+(ART&&f.by?'｜<span data-by="'+esc(f.by)+'"></span>':'')+'</span></summary>'+
+      (sm.complete?'':'<span class="badge warn">待補 '+(sm.count||0)+' 項</span> ')+'<span class="hint">'+(sm.total||'—')+' 人｜每輪 '+sm.cur+' → '+sm.final+'｜'+fdate(f.upd)+(ART&&f.by?'｜<span data-by="'+esc(f.by)+'"></span>':'')+'</span> <button class="btn sm del" data-del="'+f.id+'" style="float:right">刪除</button></summary>'+
       '<div class="row" style="margin:8px 0;gap:6px"><select data-st="'+f.id+'">'+FSTAT.map(function(x){return'<option'+(x===f.status?' selected':'')+'>'+x+'</option>'}).join('')+'</select>'+
       '<button class="btn sm pri" data-open="'+f.id+'">開啟（回到規劃）</button><button class="btn sm" data-quote="'+f.id+'">報價單（Word）</button><button class="btn sm" data-word="'+f.id+'">調整說明（Word）</button><button class="btn sm" data-exp="'+f.id+'">匯出此廠檔案</button><button class="btn sm del" data-del="'+f.id+'">刪除</button></div>'+
       '<div class="total"><div><b>'+sm.final+'</b><span>每輪測點</span></div><div><b>'+sm.year+'</b><span>全年測點</span></div><div><b>'+sm.y3+'</b><span>三年測點</span></div></div>'+
