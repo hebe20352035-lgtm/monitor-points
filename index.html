@@ -680,7 +680,7 @@ function zipStore(files,mime){
   var enc=new TextEncoder(),parts=[],cd=[],off=0;
   function u16(v){return[v&255,(v>>8)&255]}function u32(v){return[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255]}
   files.forEach(function(f){
-    var nm=enc.encode(f.name),d=enc.encode(f.data),crc=crc32(d);
+    var nm=enc.encode(f.name),d=(typeof f.data==='string')?enc.encode(f.data):f.data,crc=crc32(d);
     var lh=[].concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0));
     parts.push(new Uint8Array(lh),nm,d);
     cd.push([].concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0x21),u32(crc),u32(d.length),u32(d.length),u16(nm.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(off)),Array.from(nm));
@@ -780,9 +780,21 @@ function buildAdjDocx(R,G,st){st=st||state;
   return zipStore([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:sty},{name:'word/footer1.xml',data:ftr},{name:'word/_rels/document.xml.rels',data:drels}]);
 }
 function uqA(a){return a.filter(function(v,i,x){return x.indexOf(v)===i})}
-function dlWord(R,G,st){
-  var blob=buildAdjDocx(R,G,st);
-  saveBlob(blob,((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_作業環境監測點數調整說明.docx')}
+function h32(s){var h=5381;for(var i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return String(h)}
+function fsig(st,q){return h32(JSON.stringify(st)+'|'+q)}
+function blobB64(b){return new Promise(function(ok){var r=new FileReader();r.onload=function(){ok(String(r.result).split(',')[1]||'')};r.readAsDataURL(b)})}
+function b64Blob(s){var bin=atob(s),u=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new Blob([u],{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'})}
+function attachFile(fid,kind,blob,name,st,q){
+  if(!fid)return;
+  blobB64(blob).then(function(b64){
+    var f0=FARMS.find(function(x){return x.id===fid});if(!f0)return;
+    var f=JSON.parse(JSON.stringify(f0));
+    f.files=(f.files||[]).filter(function(x){return x.kind!==kind});
+    f.files.push({kind:kind,name:name,ts:Date.now(),sig:fsig(st,q),b64:b64});
+    farmPut(f);if(!$('#t-farm').hidden)renderFarms()})}
+function dlWord(R,G,st,fid){
+  var blob=buildAdjDocx(R,G,st),nm=((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_作業環境監測點數調整說明.docx';
+  saveBlob(blob,nm);attachFile(fid,'adj',blob,nm,st,0)}
 
 /* ---------- 報價單 Word（給報價組） ---------- */
 var QRF='<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微軟正黑體" w:cs="Calibri"/>';
@@ -844,11 +856,11 @@ function buildQuoteDocx(R,G,st,q){
   var drels=HD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>';
   return zipStore([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:sty},{name:'word/footer1.xml',data:ftr},{name:'word/_rels/document.xml.rels',data:drels}]);
 }
-function dlQuote(R,G,st,q){saveBlob(buildQuoteDocx(R,G,st,q),((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_報價數量表.docx')}
-$('#dlQuote').onclick=function(){var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}dlQuote(R,G,state,parseInt($('#qfreq').value)||1)};
+function dlQuote(R,G,st,q,fid){var blob=buildQuoteDocx(R,G,st,q),nm=((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_報價數量表.docx';saveBlob(blob,nm);attachFile(fid,'quote',blob,nm,st,q)}
+$('#dlQuote').onclick=function(){var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}farmFlush();dlQuote(R,G,state,parseInt($('#qfreq').value)||1,state.fid)};
 $('#dlAdj').onclick=function(){
   var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}
-  dlWord(R,G,state)};
+  farmFlush();dlWord(R,G,state,state.fid)};
 $('#sayStyle').onchange=function(){sayDirty=false;update(true)};
 $('#say').oninput=function(){sayDirty=true};
 $('#regen').onclick=function(){sayDirty=false;update(true)};
@@ -1405,7 +1417,7 @@ function farmFlush(){
   if(!state.fid)state.fid='f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   var a=FARMS,i=a.findIndex(function(x){return x.id===state.fid}),old=i>=0?a[i]:null;
   var R=compute(state,SET,CH),G=checkData(state,CH),S=R.sum;
-  var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',status:old?old.status:'進行中',note:old?old.note:'',upd:Date.now(),
+  var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',status:old?old.status:'進行中',note:old?old.note:'',files:old&&old.files?old.files:[],upd:Date.now(),
     state:JSON.parse(JSON.stringify(state)),sayEdit:sayDirty?$('#say').value:'',style:$('#sayStyle').value,say:$('#say').value,
     quote:$('#chemTbl').innerHTML,fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
     sum:{cur:S.cur,final:S.final,year:Math.round(S.finalYear*10)/10,y3:Math.round(S.finalYear*30)/10,big:S.big,complete:G.complete,count:G.count,total:state.total}};
@@ -1432,6 +1444,12 @@ var _update0=update;update=function(r){_update0(r);farmSchedule()};
 window.addEventListener('beforeunload',farmFlush);
 document.addEventListener('visibilitychange',function(){if(document.hidden)farmFlush()});
 var selF={};
+function farmFilesHtml(f){
+  var fs=f.files||[],cur=h32(JSON.stringify(f.state)+'|'+(parseInt(f.qf)||1)),cur0=h32(JSON.stringify(f.state)+'|0'),lab={quote:'報價單',adj:'調整說明'};
+  var h='<h3 style="margin:12px 0 4px;font-size:15px">此廠已產生的檔案</h3>';
+  if(!fs.length)return h+'<div class="hint">還沒有。按上面「報價單（Word）」或「調整說明（Word）」下載時，會自動留一份在這個資料夾。</div>';
+  return h+fs.map(function(x){var stale=x.sig!==(x.kind==='adj'?cur0:cur);
+    return'<div class="row" style="gap:8px;padding:4px 0;border-bottom:1px solid var(--line)"><span style="flex:1 1 200px;min-width:0"><b>'+(lab[x.kind]||'檔案')+'</b>　<span class="hint">'+esc(x.name)+'｜'+fdate(x.ts)+'</span>'+(stale?' <span class="badge warn">資料已更新，建議重新下載</span>':'')+'</span><button class="btn sm" data-getf="'+f.id+'|'+x.kind+'">下載</button></div>'}).join('')}
 var FSTAT=['進行中','已報價','已寄客戶說明','完成'];
 function fdate(t){var d=new Date(t);return(d.getMonth()+1)+'/'+d.getDate()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
 function renderFarms(){
@@ -1449,7 +1467,7 @@ function renderFarms(){
       '<div class="total"><div><b>'+sm.final+'</b><span>每輪測點</span></div><div><b>'+sm.year+'</b><span>全年測點</span></div><div><b>'+sm.y3+'</b><span>三年測點</span></div></div>'+
       '<div class="hint">現況 '+sm.cur+' → '+sm.final+'　'+(sm.complete?'資料完整':'暫估（資料未補齊）')+'</div>'+
       '<label class="f" style="margin-top:8px">備註（例：已寄報價、等客戶補統計表）<textarea data-note="'+f.id+'" rows="2">'+esc(f.note||'')+'</textarea></label>'+
-      '<h3 style="margin:12px 0 4px;font-size:15px">各 SEG 測點數</h3><div class="scroll"><table class="res fin">'+(f.fin||'')+'</table></div>'+
+      farmFilesHtml(f)+'<h3 style="margin:12px 0 4px;font-size:15px">各 SEG 測點數</h3><div class="scroll"><table class="res fin">'+(f.fin||'')+'</table></div>'+
       '<h3 style="margin:12px 0 4px;font-size:15px">各化學品報價數量'+(f.qf?'（'+f.qf+' 次）':'')+'</h3><div class="scroll"><table class="res fin">'+(f.quote||'')+'</table></div>'+
       '<h3 style="margin:12px 0 4px;font-size:15px">樣本數計算細項</h3><div class="scroll"><table class="res">'+(f.detail||'')+'</table></div>'+
       '<h3 style="margin:12px 0 4px;font-size:15px">客戶說明</h3><textarea class="say" readonly>'+esc(f.say||'')+'</textarea><button class="btn sm" data-copy="'+f.id+'">複製客戶說明</button></details>'}).join('');
@@ -1465,9 +1483,10 @@ $('#farmList').addEventListener('click',function(e){
   if(d.open){var r=f(d.open);if(!r)return;farmFlush();state=JSON.parse(JSON.stringify(r.state));state.fid=r.id;syncTop();renderSegs();sayDirty=false;$('#sayStyle').value=r.style||'1';$('#impReport').innerHTML='';save();update(true);
     if(r.sayEdit){$('#say').value=r.sayEdit;sayDirty=true}
     document.querySelector('#tabs button[data-t=plan]').click()}
-  else if(d.word){var r=f(d.word);if(!r)return;var R=compute(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state)}
-  else if(d.quote){var r=f(d.quote);if(!r)return;var R=compute(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1)}
+  else if(d.word){var r=f(d.word);if(!r)return;var R=compute(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state,r.id)}
+  else if(d.quote){var r=f(d.quote);if(!r)return;var R=compute(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1,r.id)}
   else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'.json')}
+  else if(d.getf){var pr=d.getf.split('|'),r=f(pr[0]);if(!r)return;var x=(r.files||[]).find(function(y){return y.kind===pr[1]});if(x)saveBlob(b64Blob(x.b64),x.name)}
   else if(d.copy){var r=f(d.copy);if(r)copyText(r.say||'',t)}
   else if(d.del){var r=f(d.del);if(r)ask('刪除「'+r.name+'」的紀錄？（所有同事都會看不到，無法復原）',function(){farmDel(d.del);renderFarms()})}
 });
@@ -1477,7 +1496,9 @@ $('#farmBak').onclick=async function(){
   var all=farmsGet(),sel=all.filter(function(x){return selF[x.id]}),use=sel.length?sel:all;
   if(!use.length){alert('還沒有可匯出的廠');return}
   var d=new Date(),ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2),used={};
-  var files=use.map(function(r,i){var n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;return{name:k+'.json',data:JSON.stringify(farmFile(r))}});
+  var files=[];use.forEach(function(r,i){var n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;
+    files.push({name:k+'/資料.json',data:JSON.stringify(farmFile(r))});
+    (r.files||[]).forEach(function(x){var bin=atob(x.b64),u=new Uint8Array(bin.length);for(var j=0;j<bin.length;j++)u[j]=bin.charCodeAt(j);files.push({name:k+'/'+x.name,data:u})})});
   saveBlob(zipStore(files,'application/zip'),'各廠資料_'+ds+'_'+use.length+'間.zip');
   toast('已匯出 '+use.length+' 間廠'+(sel.length?'（勾選的）':'（全部）'))};
 $('#farmRes').onclick=function(){$('#farmResFile').click()};
