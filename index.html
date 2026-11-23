@@ -104,6 +104,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <nav id="tabs">
     <button data-t="plan" class="on">規劃</button>
     <button data-t="chem">化學品查詢</button>
+    <button data-t="farm">各廠資料夾</button>
     
   </nav>
 </header>
@@ -111,7 +112,8 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 <section id="t-plan">
   <div class="card">
     <div class="row">
-      <label class="f" style="flex:1 1 160px;min-width:0">客戶名稱<input id="cname" placeholder="例：○○公司高雄廠"></label>
+      <label class="f" style="flex:1 1 160px;min-width:0">公司名稱<input id="cname" placeholder="例：○○股份有限公司"></label>
+      <label class="f" style="flex:1 1 110px;min-width:0">廠名<input id="cplant" placeholder="例：高雄廠"></label>
       <label class="f" style="width:120px;flex:none">全廠勞工人數<input id="total" type="number" inputmode="numeric" min="0" placeholder="51"></label>
       <span id="bigBadge" class="badge" style="align-self:flex-end;margin-bottom:6px">—</span>
     </div>
@@ -138,7 +140,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <div id="resultBox">
     <div id="guard"></div>
     <div class="card">
-      <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><span style="display:flex;gap:6px"><button class="btn sm" id="dlAdj">下載調整說明（Word）</button><button class="btn sm" id="copyTbl">複製</button></span></div>
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">報價測點數</h2><span style="display:flex;gap:6px"><button class="btn sm" id="dlQuote">報價單（Word）</button><button class="btn sm" id="dlAdj">調整說明（Word）</button><button class="btn sm" id="copyTbl">複製</button></span></div>
       <div class="total"><div><b id="sNew">0</b><span>每輪測點</span></div><div><b id="sYear">0</b><span>全年測點</span></div><div><b id="s3Year">0</b><span>三年測點</span></div></div>
       <div id="sNewLb" class="hint"></div>
       <div class="scroll" style="margin-top:8px"><table class="res fin" id="finTbl"></table></div>
@@ -158,6 +160,14 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   </div>
 </section>
 
+<section id="t-farm" hidden>
+  <div class="card">
+    <div class="row" style="justify-content:space-between"><b>各廠資料夾</b><span class="hint">匯入計畫書後自動存入，點開看進度</span></div>
+    <div class="row" style="margin-top:8px"><input id="farmQ" placeholder="搜尋客戶名稱" style="flex:1 1 160px"><button class="btn sm pri" id="farmBak">匯出（壓縮檔）</button><button class="btn sm" id="farmRes">匯入（壓縮檔／檔案）</button><input type="file" id="farmResFile" accept=".zip,.json" multiple hidden></div>
+    <div class="hint" style="margin-top:6px" id="farmStat">交接：A 按「匯出」得到壓縮檔 → B 按「匯入」選該壓縮檔（或解壓後的單廠 .json），就會帶入 A 的資料。勾選廠名左邊的方框可只匯出指定的廠。資料存在這台電腦的瀏覽器，清除瀏覽器資料會消失，請定期匯出。</div>
+  </div>
+  <div id="farmList"></div>
+</section>
 <section id="t-chem" hidden>
   <div class="card">
     <input id="cq" placeholder="搜尋中文、別名、英文或 CAS" style="width:100%">
@@ -398,6 +408,19 @@ var SET=Object.assign({},DEFAULTS);
 var state={name:'',total:'',segs:[]};
 var $=function(s){return document.querySelector(s)};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+var ART=false;
+function toast(m){var d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1E2622;color:#fff;padding:10px 16px;border-radius:10px;z-index:99;max-width:86vw;font-size:14px;white-space:pre-wrap;box-shadow:0 4px 14px rgba(0,0,0,.25)';document.body.appendChild(d);setTimeout(function(){d.remove()},4200)}
+if(ART)window.alert=toast;
+function ask(msg,ok){
+  if(!ART){if(confirm(msg))ok();return}
+  var o=document.createElement('div');o.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:98;display:flex;align-items:center;justify-content:center;padding:16px';
+  o.innerHTML='<div style="background:#fff;border-radius:12px;padding:16px;max-width:360px;width:100%"><div style="margin-bottom:14px;white-space:pre-wrap">'+esc(msg)+'</div><div style="display:flex;gap:8px;justify-content:flex-end"><button class="btn sm" data-n>取消</button><button class="btn sm pri" data-y>確定</button></div></div>';
+  document.body.appendChild(o);o.querySelector('[data-n]').onclick=function(){o.remove()};o.querySelector('[data-y]').onclick=function(){o.remove();ok()}}
+var DL=null;
+if(ART&&typeof claude!=='undefined'){try{claude.use('downloads').then(function(d){DL=d})['catch'](function(){})}catch(e){}}
+function saveBlob(blob,name){
+  if(ART){if(!DL){toast('此環境無法下載檔案');return}DL.save({filename:name,data:blob}).then(function(){toast('已儲存 '+name)},function(e){if(e&&e.code!=='declined')toast('下載失敗：'+(e.message||e.code))});return}
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify({state:state,SET:SET}))}catch(e){}}
 function load(){try{var d=JSON.parse(localStorage.getItem(KEY)||'null');if(d){state=d.state||state;if(MODE==='self'&&d.SET)SET=Object.assign({},DEFAULTS,d.SET)}}catch(e){}}
 function newItem(){return{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}}
@@ -487,15 +510,17 @@ $('#segs').addEventListener('click',function(e){
   var gEl=b.closest('.seg');var g=state.segs[+gEl.dataset.g];
   if(b.dataset.act==='okS'){var si=+b.closest('tr').dataset.i;delete g.items[si].sflag;renderSegs();save();update(true);return}
   if(b.dataset.act==='okFlag'){delete g.flag[b.dataset.k];renderSegs();save();update(true);return}
-  if(b.dataset.act==='delSeg'){if(confirm('刪除 '+g.code+'？')){state.segs.splice(+gEl.dataset.g,1);renderSegs()}}
+  if(b.dataset.act==='delSeg'){ask('刪除 '+g.code+'？',function(){state.segs.splice(+gEl.dataset.g,1);renderSegs()})}
   else if(b.dataset.act==='addItem'){g.items.push(newItem());renderSegs()}
   else if(b.dataset.act==='delItem'){var i=+b.closest('tr').dataset.i;g.items.splice(i,1);if(!g.items.length)g.items.push(newItem());renderSegs()}
   save();update(true);
 });
 $('#addSeg').onclick=function(){state.segs.push(newSeg(state.segs.length+1));renderSegs();save();update(true)};
 $('#cname').oninput=function(){state.name=this.value;save();update(false)};
+$('#cplant').oninput=function(){state.plant=this.value;save();update(false)};
+function fullName(st){var n=((st&&st.name)||'').trim(),p=((st&&st.plant)||'').trim();return p&&n.indexOf(p)<0?(n?n+' '+p:p):n}
 $('#total').oninput=function(){state.total=this.value;save();update(true)};
-$('#clearAll').onclick=function(){if(confirm('清空目前所有資料？')){state={name:'',total:'',segs:[]};syncTop();renderSegs();save();update(true)}};
+$('#clearAll').onclick=function(){ask('清空目前畫面？（已存入各廠資料夾的紀錄不會刪除）',function(){farmFlush();state={name:'',total:'',segs:[]};syncTop();renderSegs();save();update(true)})};
 
 /* ---------- 結果 ---------- */
 var sayDirty=false;
@@ -557,7 +582,7 @@ function update(regen){
   function qGrp(n){if(/局部排氣/.test(n))return 4;if(/二氧化碳/.test(n))return 5;if(/照度|照明/.test(n))return 6;if(/噪音/.test(n))return /區域/.test(n)&&!/劑量|個人/.test(n)?2:1;if(PHYSX.test(n))return 3;return 0}
   var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});var q=parseInt($('#qfreq').value)||1;var tot=0,h3='';
   if(names.length){
-    h3='<thead><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
+    h3='<thead><tr><th colspan="5" style="text-align:left;background:#fff;border-bottom:2px solid var(--accent)">公司名稱：'+esc(state.name||'（未填）')+'　　廠名：'+esc(state.plant||'（未填）')+'</th></tr><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
     names.forEach(function(nm,i){var c=Math.round(agg[nm]*10)/10;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td>'+esc(nm)+'</td><td class="big">'+c+'</td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
     h3+='<tr><td colspan="2"><b>合計</b></td><td class="num"><b>'+Math.round(tot/q*10)/10+'</b></td><td class="num">'+q+'</td><td class="num"><b>'+Math.round(tot*10)/10+'</b></td></tr></tbody>';
   }
@@ -653,7 +678,7 @@ function wPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w
 function wCell(w,lines,o){o=o||{};return'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'<w:vAlign w:val="'+(o.fill?'center':'top')+'"/></w:tcPr>'+lines.map(function(t){return wPara(t,{sz:22,b:!!o.fill,line:300,after:0,jc:o.fill?'center':(o.jc||'both')})}).join('')+'</w:tc>'}
 var CRCT=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
 function crc32(u){var c=0xFFFFFFFF;for(var i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
-function zipStore(files){
+function zipStore(files,mime){
   var enc=new TextEncoder(),parts=[],cd=[],off=0;
   function u16(v){return[v&255,(v>>8)&255]}function u32(v){return[v&255,(v>>8)&255,(v>>16)&255,(v>>>24)&255]}
   files.forEach(function(f){
@@ -664,8 +689,22 @@ function zipStore(files){
     off+=lh.length+nm.length+d.length});
   var cdLen=0;cd.forEach(function(a){cdLen+=a.length});
   var end=[].concat(u32(0x06054b50),u16(0),u16(0),u16(files.length),u16(files.length),u32(cdLen),u32(off),u16(0));
-  return new Blob(parts.concat(cd.map(function(a){return new Uint8Array(a)}),[new Uint8Array(end)]),{type:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'})
+  return new Blob(parts.concat(cd.map(function(a){return new Uint8Array(a)}),[new Uint8Array(end)]),{type:mime||'application/vnd.openxmlformats-officedocument.wordprocessingml.document'})
 }
+async function unzipAll(buf){
+  var u=new Uint8Array(buf),dv=new DataView(buf),out=[],e=-1;
+  for(var i=u.length-22;i>=Math.max(0,u.length-65600);i--){if(dv.getUint32(i,true)===0x06054b50){e=i;break}}
+  if(e<0)throw new Error('不是壓縮檔');
+  var n=dv.getUint16(e+10,true),off=dv.getUint32(e+16,true),dec=new TextDecoder();
+  for(var k=0;k<n;k++){
+    if(dv.getUint32(off,true)!==0x02014b50)break;
+    var meth=dv.getUint16(off+10,true),csz=dv.getUint32(off+20,true),nl=dv.getUint16(off+28,true),el=dv.getUint16(off+30,true),cl=dv.getUint16(off+32,true),lo=dv.getUint32(off+42,true);
+    var name=dec.decode(u.subarray(off+46,off+46+nl));off+=46+nl+el+cl;
+    if(name.slice(-1)==='/')continue;
+    var lnl=dv.getUint16(lo+26,true),lel=dv.getUint16(lo+28,true),ds=lo+30+lnl+lel,raw=u.subarray(ds,ds+csz),data;
+    if(meth===0)data=raw;else if(meth===8){data=new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer())}else continue;
+    out.push({name:name,data:data})}
+  return out}
 function adjReason(r,S){
   var pct=fmtPct(r.ratio),cn=String(r.conc==null?'':r.conc).trim();
   var judge='判定濃度 '+cn+' '+r.unit+'，為容許濃度（'+r.pel+' '+r.unit+'）的 '+pct+(r.src!=='x95'?'（暫用單次結果）':'')+'。';
@@ -683,9 +722,9 @@ function adjReason(r,S){
   else{fq='每 '+r.freq+' 個月';txt=judge+lt+'屬「'+r.tier.label+'」，依公告每 '+r.freq+' 個月監測一次，每次 '+r.n+' 個樣本。'+(pp?' '+pp:'')}
   return{fq:fq,txt:txt+personal}
 }
-function buildAdjDocx(R,G){
+function buildAdjDocx(R,G,st){st=st||state;
   var S=R.sum,now=new Date(),roc=(now.getFullYear()-1911)+' 年 '+(now.getMonth()+1)+' 月 '+now.getDate()+' 日';
-  var cname=(state.name||'').trim()||'（客戶名稱）';
+  var cname=fullName(st)||'（客戶名稱）';
   var rows=R.rows.slice().sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
   var pending=rows.filter(function(r){return r.mode==='pending'});
   var nNo=rows.filter(function(r){return r.mode==='nodata'}).length;
@@ -706,8 +745,8 @@ function buildAdjDocx(R,G){
   H('一、調整依據');
   B.push(wPara('勞動部 115 年 11 月 19 日勞職授字第1150254044A號公告「雇主應實施作業環境監測之作業場所應監測對象、採樣數量及頻率等事項」，自 116 年 1 月 1 日施行。監測改以「相似暴露族群」為單位：每一族群之每一監測項目須先完成初始採樣（至少 6 個樣本），之後依事業單位勞工人數及暴露濃度級距，決定定期監測頻率與樣本數；族群勞工 3 人以上未達 10 人者至少 3 個樣本，未達 3 人者全部勞工採樣。'));
   H('二、貴公司適用情形');
-  var tot=parseFloat(state.total)||0;
-  B.push(wPara('貴公司勞工人數 '+(state.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+'。'));
+  var tot=parseFloat(st.total)||0;
+  B.push(wPara('貴公司勞工人數 '+(st.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+'。'));
   var bl=[];
   if(nNo)bl.push(nNo+' 個項目尚無數據，需先完成初始採樣（每項目 6 個樣本）');
   if(skipItems.length)bl.push(skipItems.length+' 個項目（'+skipItems.join('、')+'）依附表之註只測濃度最高族群，其餘族群本次免測');
@@ -743,11 +782,75 @@ function buildAdjDocx(R,G){
   return zipStore([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:sty},{name:'word/footer1.xml',data:ftr},{name:'word/_rels/document.xml.rels',data:drels}]);
 }
 function uqA(a){return a.filter(function(v,i,x){return x.indexOf(v)===i})}
+function dlWord(R,G,st){
+  var blob=buildAdjDocx(R,G,st);
+  saveBlob(blob,((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_作業環境監測點數調整說明.docx')}
+
+/* ---------- 報價單 Word（給報價組） ---------- */
+var QRF='<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微軟正黑體" w:cs="Calibri"/>';
+function qRun(t,o){o=o||{};var sz=o.sz||21;return'<w:r><w:rPr>'+QRF+(o.b?'<w:b/>':'')+'<w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/>'+(o.color?'<w:color w:val="'+o.color+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xe(t)+'</w:t></w:r>'}
+function qPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?0:o.after)+'" w:line="'+(o.line||276)+'" w:lineRule="auto"/><w:jc w:val="'+(o.jc||'left')+'"/></w:pPr>'+qRun(t,o)+'</w:p>'}
+function qCell(w,t,o){o=o||{};return'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.span?'<w:gridSpan w:val="'+o.span+'"/>':'')+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'<w:vAlign w:val="center"/></w:tcPr>'+qPara(t,{sz:o.sz||21,b:o.b,color:o.color,jc:o.jc||'left',line:260})+'</w:tc>'}
+function qTbl(W,head,rows,o){o=o||{};var tw=W.reduce(function(a,b){return a+b},0),bc=o.bc||'C9D3CD';
+  var T='<w:tbl><w:tblPr><w:tblW w:w="'+tw+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(b){return'<w:'+b+' w:val="'+(o.none?'nil':'single')+'" w:sz="4" w:color="'+bc+'"/>'}).join('')+'</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+W.map(function(w){return'<w:gridCol w:w="'+w+'"/>'}).join('')+'</w:tblGrid>';
+  if(head)T+='<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'+head.map(function(h,i){return qCell(W[i],h,{fill:'1F5A46',color:'FFFFFF',b:true,jc:'center'})}).join('')+'</w:tr>';
+  rows.forEach(function(r){T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+r.map(function(c,i){return qCell(c.w||W[i],c.t,c)}).join('')+'</w:tr>'});
+  return T+'</w:tbl>'}
+function chemAgg(R,q){
+  var fr=finRows(R),agg={};
+  fr.forEach(function(r){var k=r.item;if(/噪音/.test(k)&&!/劑量|區域|個人/.test(k))k=/區域/.test(r.method||'')?'區域噪音':'劑量噪音';agg[k]=(agg[k]||0)+r.n});
+  function qGrp(n){if(/局部排氣/.test(n))return 4;if(/二氧化碳/.test(n))return 5;if(/照度|照明/.test(n))return 6;if(/噪音/.test(n))return /區域/.test(n)&&!/劑量|個人/.test(n)?2:1;if(PHYSX.test(n))return 3;return 0}
+  var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});
+  return{fr:fr,agg:agg,names:names}}
+function buildQuoteDocx(R,G,st,q){
+  var S=R.sum,now=new Date(),dt=now.getFullYear()+'/'+('0'+(now.getMonth()+1)).slice(-2)+'/'+('0'+now.getDate()).slice(-2);
+  var A=chemAgg(R,q),r1=function(x){return Math.round(x*10)/10};
+  var qlab=q===1?'1 次（每六個月）':(q===2?'2 次（年約）':(q===6?'6 次（三年約）':q+' 次'));
+  var B=[];
+  if(!G.complete)B.push(qPara('【暫估】資料尚未補齊，數量可能變動，請勿作為正式報價依據',{sz:20,b:true,color:'B42318',jc:'center',after:120}));
+  B.push(qPara('作業環境監測　報價數量表',{sz:36,b:true,color:'1F5A46',after:40}));
+  B.push(qPara('依 116.1.1 新制測點數計算',{sz:19,color:'6B766F',after:200}));
+  var IW=[1500,3369,1500,3269];
+  B.push(qTbl(IW,null,[
+    [{t:'公司名稱',b:true,fill:'EEF3F0'},{t:st.name||'—',span:3,w:8138}],
+    [{t:'廠名',b:true,fill:'EEF3F0'},{t:st.plant||'—'},{t:'全廠勞工人數',b:true,fill:'EEF3F0'},{t:(st.total||'—')+' 人'}],
+    [{t:'報價頻率',b:true,fill:'EEF3F0'},{t:qlab},{t:'製表日期',b:true,fill:'EEF3F0'},{t:dt}]
+  ]));
+  B.push(qPara('',{after:160}));
+  var SW=[3212,3213,3213];
+  B.push(qTbl(SW,null,[[
+    {t:'每輪測點　'+S.final+' 點',b:true,sz:26,jc:'center',fill:'E2EEE8',color:'1F5A46'},
+    {t:'全年測點　'+r1(S.finalYear)+' 點',b:true,sz:26,jc:'center',fill:'E2EEE8',color:'1F5A46'},
+    {t:'三年測點　'+r1(S.finalYear*30/10)+' 點',b:true,sz:26,jc:'center',fill:'E2EEE8',color:'1F5A46'}]],{none:true,bc:'FFFFFF'}));
+  B.push(qPara('一、各化學品報價數量',{sz:26,b:true,color:'1F5A46',keep:true,before:280,after:100}));
+  var W1=[900,4238,1500,1500,1500],rows1=[],tot=0;
+  A.names.forEach(function(nm,i){var c=r1(A.agg[nm]);tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
+  rows1.push([{t:'合計',span:2,w:5138,b:true,fill:'EEF3F0'},{t:String(r1(tot/q)),jc:'center',b:true,fill:'EEF3F0'},{t:String(q),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(tot)),jc:'center',b:true,fill:'EEF3F0'}]);
+  B.push(qTbl(W1,['編號','品名','數量（點）','頻率（次）','小計（點）'],rows1));
+  B.push(qPara('二、各 SEG 測點數',{sz:26,b:true,color:'1F5A46',keep:true,before:320,after:100}));
+  var W2=[2100,2300,1250,1250,2738],rows2=[],last='';
+  A.fr.forEach(function(r){var key=r.seg+'|'+(r.segName||''),first=key!==last;last=key;
+    rows2.push([{t:first?(r.seg+(r.segName?'　'+r.segName:'')):''},{t:r.item},{t:String(r.n),jc:'center',b:true},{t:String(r1(r.n*(12/r.freq))),jc:'center'},{t:r.note||'',sz:18,color:'55605A'}])});
+  rows2.push([{t:"合計",span:2,w:4400,b:true,fill:"EEF3F0"},{t:String(S.final),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(S.finalYear)),jc:'center',b:true,fill:'EEF3F0'},{t:'',fill:'EEF3F0'}]);
+  B.push(qTbl(W2,['SEG／區域','項目','每輪測點','全年測點','備註'],rows2));
+  B.push(qPara('註：測點數以現行 116.1.1 新制規則計算；全年測點 ＝ 每輪測點 × 每年次數。',{sz:18,color:'6B766F',before:160}));
+  var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  var HD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  var doc=HD+'<w:document '+NS+'><w:body>'+B.join('')+'<w:sectPr><w:footerReference w:type="default" r:id="rIdF1"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>';
+  var fr=function(x){return'<w:r><w:rPr>'+QRF+'<w:color w:val="6B766F"/><w:sz w:val="17"/><w:szCs w:val="17"/></w:rPr>'+x+'</w:r>'};
+  var fld=function(c){return fr('<w:fldChar w:fldCharType="begin"/>')+fr('<w:instrText xml:space="preserve"> '+c+' </w:instrText>')+fr('<w:fldChar w:fldCharType="separate"/>')+fr('<w:t>1</w:t>')+fr('<w:fldChar w:fldCharType="end"/>')};
+  var ftr=HD+'<w:ftr '+NS+'><w:p><w:pPr><w:jc w:val="center"/></w:pPr>'+fr('<w:t xml:space="preserve">安平技術顧問有限公司　第 </w:t>')+fld('PAGE')+fr('<w:t xml:space="preserve"> 頁，共 </w:t>')+fld('NUMPAGES')+fr('<w:t xml:space="preserve"> 頁</w:t>')+'</w:p></w:ftr>';
+  var sty=HD+'<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr>'+QRF+'<w:sz w:val="21"/><w:szCs w:val="21"/><w:lang w:val="en-US" w:eastAsia="zh-TW"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="0"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>';
+  var ct=HD+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>';
+  var rels=HD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>';
+  var drels=HD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdS1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rIdF1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>';
+  return zipStore([{name:'[Content_Types].xml',data:ct},{name:'_rels/.rels',data:rels},{name:'word/document.xml',data:doc},{name:'word/styles.xml',data:sty},{name:'word/footer1.xml',data:ftr},{name:'word/_rels/document.xml.rels',data:drels}]);
+}
+function dlQuote(R,G,st,q){saveBlob(buildQuoteDocx(R,G,st,q),((fullName(st)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_報價數量表.docx')}
+$('#dlQuote').onclick=function(){var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}dlQuote(R,G,state,parseInt($('#qfreq').value)||1)};
 $('#dlAdj').onclick=function(){
   var R=window._R,G=window._G;if(!R||(!R.rows.length&&!R.keep.length)){alert('請先匯入計畫書或輸入 SEG');return}
-  var blob=buildAdjDocx(R,G);var a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download=((state.name||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶')+'_作業環境監測點數調整說明.docx';document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},1000)};
-
+  dlWord(R,G,state)};
 $('#sayStyle').onchange=function(){sayDirty=false;update(true)};
 $('#say').oninput=function(){sayDirty=true};
 $('#regen').onclick=function(){sayDirty=false;update(true)};
@@ -764,12 +867,12 @@ $('#copyTbl').onclick=function(){
   L.push(['合計','','',R.sum.final,Math.round(R.sum.finalYear*10)/10,Math.round(R.sum.finalYear*30)/10,''].join('\t'));
   copyText(L.join('\n'),this)};
 $('#qfreq').onchange=function(){update()};
-$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
+$('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'廠名\t'+(state.plant||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.names.forEach(function(nm,i){var c=Math.round(C.agg[nm]*10)/10;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
 $('#advGrp').onchange=function(){document.body.classList.toggle('advg',this.checked)};
 $('#advChk').onchange=function(){document.body.classList.toggle('adv',this.checked)};
 
 /* ---------- 匯入／匯出 ---------- */
-function syncTop(){$('#cname').value=state.name||'';$('#total').value=state.total||''}
+function syncTop(){$('#cname').value=state.name||'';$('#cplant').value=state.plant||'';$('#total').value=state.total||''}
 $('#openImp').onclick=function(){$('#impModal').classList.add('show')};
 $('#impClose').onclick=function(){$('#impModal').classList.remove('show')};
 function doImport(replace){
@@ -1104,7 +1207,7 @@ $('#docFile').onchange=async function(){
   try{
     var r=await parseDocx(f);
     if(!r.segs.length){alert('讀不到 SEG 資料，請確認是否為作業環境監測計畫書。');return}
-    if((state.segs||[]).some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})})&&!confirm('目前已有資料，匯入會覆蓋，確定嗎？'))return;
+    farmFlush();
     state={name:r.name,total:r.total,segs:r.segs};
     syncTop();renderSegs();save();update(true);showReport(r,f.name);
   }catch(e){alert('讀取失敗：'+e.message+'\n請把這個檔案傳給開發者檢查（也可先用 Word 另存成 .docx 再匯入）。')}
@@ -1231,10 +1334,10 @@ $('#concGo').onclick=function(){
   $('#impReport').innerHTML=h+'</div>';$('#repClose').onclick=function(){$('#impReport').innerHTML=''}};
 
 $('#exp').onclick=function(){
-  var b=new Blob([JSON.stringify({state:state,SET:SET})],{type:'application/json'});var a=document.createElement('a');
-  a.href=URL.createObjectURL(b);a.download=(state.name||'監測點數')+'.json';document.body.appendChild(a);a.click();a.remove()};
+  var b=new Blob([JSON.stringify({state:state,SET:SET})],{type:'application/json'});
+  saveBlob(b,(fullName(state)||'監測點數')+'.json')};
 $('#impFileBtn').onclick=function(){$('#impFile').click()};
-$('#impFile').onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var d=JSON.parse(r.result);state=d.state||state;if(MODE==='self'&&d.SET)SET=Object.assign({},DEFAULTS,d.SET);syncTop();renderSegs();save();update(true);renderSet()}catch(e){alert('檔案格式不符')}};r.readAsText(f);this.value=''};
+$('#impFile').onchange=function(){var f=this.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var d=JSON.parse(r.result);farmFlush();state=d.state||(d.farm&&d.farm.state)||state;if(MODE==='self'&&d.SET)SET=Object.assign({},DEFAULTS,d.SET);syncTop();renderSegs();save();update(true);renderSet()}catch(e){alert('檔案格式不符')}};r.readAsText(f);this.value=''};
 
 /* ---------- 化學品查詢 ---------- */
 var CF='law';
@@ -1266,10 +1369,147 @@ function renderChem(){
   $('#clist').innerHTML=h||'<div class="hint">查無資料</div>';
 }
 
+
+/* ---------- 各廠資料夾（自動記憶） ---------- */
+var FKEY=KEY+'.farms',farmT=null,FARMS=[],DB=null,ME=null,wq={},wbusy={},ft={},lastSnap=0,gone={};
+if(!ART){try{FARMS=JSON.parse(localStorage.getItem(FKEY)||'[]')||[]}catch(e){FARMS=[]}}
+function farmsGet(){return FARMS}
+function farmLocalSave(){if(ART&&DB)return;try{localStorage.setItem(FKEY,JSON.stringify(FARMS))}catch(e){alert('瀏覽器儲存空間已滿，請先按「匯出」，再刪除舊的廠資料')}}
+function farmStat(m,bad){var el=$('#farmStat');if(el){el.textContent=m;el.style.color=bad?'#B42318':''}}
+function slim(r){
+  var o=JSON.parse(JSON.stringify(r)),n=JSON.stringify(o).length;
+  if(n>240000){o.detail='';n=JSON.stringify(o).length}
+  if(n>240000){o.quote='';n=JSON.stringify(o).length}
+  if(n>240000){o.fin=''}
+  return o}
+async function pump(id){
+  if(wbusy[id])return;wbusy[id]=1;
+  try{while(wq[id]){var r=wq[id];delete wq[id];
+    try{await DB.doc('farms/'+id).set(slim(r));farmStat('已同步到共用資料夾')}
+    catch(e){farmStat('同步失敗（'+((e&&e.code)||'錯誤')+'），請稍後再試',1);if(e&&e.code==='quota_exceeded')alert('共用資料庫已滿，請先刪除舊的廠資料')}}}
+  finally{wbusy[id]=0}}
+function farmPut(rec,later){
+  var i=FARMS.findIndex(function(x){return x.id===rec.id});if(i>=0)FARMS[i]=rec;else FARMS.unshift(rec);
+  if(!(ART&&DB)){farmLocalSave();return}
+  if(ME&&ME.id)rec.by=ME.id;
+  var go=function(){wq[rec.id]=rec;pump(rec.id)};
+  if(later){clearTimeout(ft[rec.id]);ft[rec.id]=setTimeout(go,700)}else go()}
+function farmDel(id){
+  gone[id]=1;
+  FARMS=FARMS.filter(function(x){return x.id!==id});delete wq[id];clearTimeout(ft[id]);
+  if(ART&&DB){DB.doc('farms/'+id)['delete']()['catch'](function(e){farmStat('刪除失敗，請稍後再試',1)})}else farmLocalSave()}
+function farmSchedule(){clearTimeout(farmT);farmT=setTimeout(farmFlush,600)}
+function farmFlush(){
+  clearTimeout(farmT);
+  if(!state||!(state.segs||[]).some(function(g){return g.name||g.people||(g.items||[]).some(function(i){return i.name})}))return;
+  if(state.name==='範例工廠')return;
+  if(state.fid&&gone[state.fid])return;
+  if(!state.fid)state.fid='f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  var a=FARMS,i=a.findIndex(function(x){return x.id===state.fid}),old=i>=0?a[i]:null;
+  var R=compute(state,SET,CH),G=checkData(state,CH),S=R.sum;
+  var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',co:state.name||'',plant:state.plant||'',status:old?old.status:'進行中',note:old?old.note:'',upd:Date.now(),
+    state:JSON.parse(JSON.stringify(state)),sayEdit:sayDirty?$('#say').value:'',style:$('#sayStyle').value,say:$('#say').value,
+    quote:$('#chemTbl').innerHTML,fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
+    sum:{cur:S.cur,final:S.final,year:Math.round(S.finalYear*10)/10,y3:Math.round(S.finalYear*30)/10,big:S.big,complete:G.complete,count:G.count,total:state.total}};
+  if(old&&JSON.stringify(old.state)===JSON.stringify(rec.state)&&old.say===rec.say&&old.name===rec.name)return;
+  farmPut(rec);
+}
+async function farmInit(){
+  if(!ART||typeof claude==='undefined'){return}
+  try{DB=await claude.use('db')}catch(e){DB=null}
+  try{var u=await claude.use('user');if(u)ME=await u.me()}catch(e){}
+  if(!DB){FARMS=[];try{FARMS=JSON.parse(localStorage.getItem(FKEY)||'[]')||[]}catch(e){}farmStat('目前無法連線共用資料庫，資料只存在這個瀏覽器（請登入 Claude 後重開）',1);return}
+  farmStat('連線共用資料夾中…');
+  var tm=setTimeout(function(){farmStat('連不上共用資料夾，目前顯示的可能不是最新',1)},10000);
+  DB.collection('farms').onSnapshot(function(snap){
+    if(!snap.metadata.fromCache){clearTimeout(tm)}
+    snap.docChanges().forEach(function(c){if(c.type==='removed'&&!wq[c.doc.id]){gone[c.doc.id]=1;if(state&&state.fid===c.doc.id)toast('這間廠的資料夾已被刪除，目前畫面不會再自動存入')}});
+    FARMS=snap.docs.map(function(d){return d.data()});
+    lastSnap=Date.now();farmStat((snap.metadata.fromCache?'載入中…':'共用同步中')+'｜共 '+FARMS.length+' 間廠');
+    var ae=document.activeElement;if(ae&&ae.closest&&ae.closest('#farmList')&&/TEXTAREA|SELECT/.test(ae.tagName))return;
+    if(!$('#t-farm').hidden)renderFarms();
+  },function(e){clearTimeout(tm);farmStat('共用資料夾連線中斷（'+((e&&e.code)||'錯誤')+'），請重新整理頁面',1)});
+}
+var _update0=update;update=function(r){_update0(r);farmSchedule()};
+window.addEventListener('beforeunload',farmFlush);
+document.addEventListener('visibilitychange',function(){if(document.hidden)farmFlush()});
+var selF={};
+var FSTAT=['進行中','已報價','已寄客戶說明','完成'];
+function fdate(t){var d=new Date(t);return(d.getMonth()+1)+'/'+d.getDate()+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)}
+function renderFarms(){
+  var a=farmsGet().slice().sort(function(x,y){return y.upd-x.upd}),q=($('#farmQ').value||'').trim();
+  var opened={};document.querySelectorAll('#farmList details[open]').forEach(function(d){opened[d.dataset.id]=1});
+  if(q)a=a.filter(function(f){return f.name.indexOf(q)>=0});
+  var el=$('#farmList');
+  if(!a.length){el.innerHTML='<div class="card hint">'+(q?'找不到符合的廠':'還沒有資料。到「規劃」匯入計畫書後，會自動存到這裡。')+'</div>';return}
+  el.innerHTML=a.map(function(f){
+    var sm=f.sum||{};
+    return'<details class="fold farm" data-id="'+f.id+'"'+(opened[f.id]?' open':'')+'><summary><input type="checkbox" data-sel="'+f.id+'"'+(selF[f.id]?' checked':'')+' title="勾選後只匯出勾選的廠"> <b>'+esc(f.name)+'</b> <span class="badge">'+esc(f.status)+'</span> '+
+      (sm.complete?'':'<span class="badge warn">待補 '+(sm.count||0)+' 項</span> ')+'<span class="hint">'+(sm.total||'—')+' 人｜每輪 '+sm.cur+' → '+sm.final+'｜'+fdate(f.upd)+(ART&&f.by?'｜<span data-by="'+esc(f.by)+'"></span>':'')+'</span></summary>'+
+      '<div class="row" style="margin:8px 0;gap:6px"><select data-st="'+f.id+'">'+FSTAT.map(function(x){return'<option'+(x===f.status?' selected':'')+'>'+x+'</option>'}).join('')+'</select>'+
+      '<button class="btn sm pri" data-open="'+f.id+'">開啟（回到規劃）</button><button class="btn sm" data-quote="'+f.id+'">報價單（Word）</button><button class="btn sm" data-word="'+f.id+'">調整說明（Word）</button><button class="btn sm" data-exp="'+f.id+'">匯出此廠檔案</button><button class="btn sm del" data-del="'+f.id+'">刪除</button></div>'+
+      '<div class="total"><div><b>'+sm.final+'</b><span>每輪測點</span></div><div><b>'+sm.year+'</b><span>全年測點</span></div><div><b>'+sm.y3+'</b><span>三年測點</span></div></div>'+
+      '<div class="hint">現況 '+sm.cur+' → '+sm.final+'　'+(sm.complete?'資料完整':'暫估（資料未補齊）')+'</div>'+
+      '<label class="f" style="margin-top:8px">備註（例：已寄報價、等客戶補統計表）<textarea data-note="'+f.id+'" rows="2">'+esc(f.note||'')+'</textarea></label>'+
+      '<h3 style="margin:12px 0 4px;font-size:15px">各 SEG 測點數</h3><div class="scroll"><table class="res fin">'+(f.fin||'')+'</table></div>'+
+      '<h3 style="margin:12px 0 4px;font-size:15px">各化學品報價數量'+(f.qf?'（'+f.qf+' 次）':'')+'</h3><div class="scroll"><table class="res fin">'+(f.quote||'')+'</table></div>'+
+      '<h3 style="margin:12px 0 4px;font-size:15px">樣本數計算細項</h3><div class="scroll"><table class="res">'+(f.detail||'')+'</table></div>'+
+      '<h3 style="margin:12px 0 4px;font-size:15px">客戶說明</h3><textarea class="say" readonly>'+esc(f.say||'')+'</textarea><button class="btn sm" data-copy="'+f.id+'">複製客戶說明</button></details>'}).join('');
+  if(ART&&typeof claude!=='undefined'){claude.use('user').then(function(u){if(!u)return;var ids=uqA(a.map(function(f){return f.by}).filter(Boolean));if(!ids.length)return;return u.profiles(ids).then(function(ps){document.querySelectorAll('#farmList [data-by]').forEach(function(s){var p=ps[s.dataset.by];s.textContent='最後編輯：'+((p&&p.name)||'同事')})})})['catch'](function(){})}
+}
+function farmUpd(id,fn,later){var f0=FARMS.find(function(x){return x.id===id});if(!f0)return;var f=JSON.parse(JSON.stringify(f0));fn(f);f.upd=Date.now();farmPut(f,later)}
+$('#farmQ').oninput=renderFarms;
+$('#farmList').addEventListener('change',function(e){if(e.target.dataset.sel){selF[e.target.dataset.sel]=e.target.checked;return}var id=e.target.dataset.st;if(id)farmUpd(id,function(f){f.status=e.target.value;var b=e.target.closest('details').querySelector('summary .badge');if(b)b.textContent=f.status})});
+$('#farmList').addEventListener('input',function(e){var id=e.target.dataset.note;if(id)farmUpd(id,function(f){f.note=e.target.value},true)});
+$('#farmList').addEventListener('click',function(e){
+  var t=e.target.closest('button');if(!t)return;var d=t.dataset;
+  var f=function(id){return farmsGet().find(function(x){return x.id===id})};
+  if(d.open){var r=f(d.open);if(!r)return;farmFlush();state=JSON.parse(JSON.stringify(r.state));state.fid=r.id;syncTop();renderSegs();sayDirty=false;$('#sayStyle').value=r.style||'1';$('#impReport').innerHTML='';save();update(true);
+    if(r.sayEdit){$('#say').value=r.sayEdit;sayDirty=true}
+    document.querySelector('#tabs button[data-t=plan]').click()}
+  else if(d.word){var r=f(d.word);if(!r)return;var R=compute(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state)}
+  else if(d.quote){var r=f(d.quote);if(!r)return;var R=compute(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1)}
+  else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'.json')}
+  else if(d.copy){var r=f(d.copy);if(r)copyText(r.say||'',t)}
+  else if(d.del){var r=f(d.del);if(r)ask('刪除「'+r.name+'」的紀錄？（所有同事都會看不到，無法復原）',function(){farmDel(d.del);renderFarms()})}
+});
+function fnSafe(s){return(String(s||'').replace(/[\\/:*?"<>|]/g,'').trim()||'未命名廠').slice(0,60)}
+function farmFile(r){return{v:2,kind:'monitor-farm',state:r.state,farm:r}}
+$('#farmBak').onclick=async function(){
+  var all=farmsGet(),sel=all.filter(function(x){return selF[x.id]}),use=sel.length?sel:all;
+  if(!use.length){alert('還沒有可匯出的廠');return}
+  var d=new Date(),ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2),used={};
+  var files=use.map(function(r,i){var n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;return{name:k+'.json',data:JSON.stringify(farmFile(r))}});
+  saveBlob(zipStore(files,'application/zip'),'各廠資料_'+ds+'_'+use.length+'間.zip');
+  toast('已匯出 '+use.length+' 間廠'+(sel.length?'（勾選的）':'（全部）'))};
+$('#farmRes').onclick=function(){$('#farmResFile').click()};
+$('#farmResFile').onchange=async function(){
+  var fl=Array.prototype.slice.call(this.files||[]);this.value='';if(!fl.length)return;
+  var recs=[],bad=0;
+  function take(d){
+    if(!d)return;
+    if(Array.isArray(d.farms)){d.farms.forEach(take);return}
+    var r=d.farm||d;
+    if(r&&r.id&&r.state&&r.state.segs){recs.push(r)}else bad++}
+  try{
+    for(var i=0;i<fl.length;i++){
+      var f=fl[i],buf=await f.arrayBuffer();
+      if(/\.zip$/i.test(f.name)){
+        var es=await unzipAll(buf);
+        es.forEach(function(en){if(!/\.json$/i.test(en.name))return;try{take(JSON.parse(new TextDecoder().decode(en.data)))}catch(x){bad++}})
+      }else{try{take(JSON.parse(new TextDecoder().decode(new Uint8Array(buf))))}catch(x){bad++}}}
+  }catch(x){alert('讀取失敗：'+x.message);return}
+  var a=farmsGet(),n=0,old=0,names=[];
+  recs.forEach(function(x){var j=a.findIndex(function(y){return y.id===x.id});
+    if(j<0||(x.upd||0)>(a[j].upd||0)){farmPut(x);n++;names.push(x.name)}else old++});
+  renderFarms();
+  alert(recs.length?('已匯入 '+n+' 間'+(old?'；'+old+' 間本機已有較新的資料，未覆蓋':'')+(bad?'；'+bad+' 個檔案無法辨識':'')):'沒有找到各廠資料檔（請選匯出的壓縮檔或 .json）')};
+
+farmInit();
 /* ---------- 分頁、設定、範例 ---------- */
 $('#tabs').onclick=function(e){var b=e.target.closest('button');if(!b)return;
   document.querySelectorAll('#tabs button').forEach(function(x){x.classList.toggle('on',x===b)});
-  ['plan','chem','set'].forEach(function(t){var el=$('#t-'+t);if(el)el.hidden=(b.dataset.t!==t)})};
+  ['plan','chem','farm','set'].forEach(function(t){var el=$('#t-'+t);if(el)el.hidden=(b.dataset.t!==t)});if(b.dataset.t==='farm'){farmFlush();renderFarms()}};
 function renderSet(){
   if(MODE!=='self')return;
   $('#setProv').checked=!!SET.proviso;$('#setMid').value=String(SET.mid);$('#setTie').value=SET.tie;
