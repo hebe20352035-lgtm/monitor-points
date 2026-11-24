@@ -712,6 +712,7 @@ function adjReason(r,S){
   var nt=(r.notes||[]).join('|'),pp='';
   if(/3～9人/.test(nt))pp='另本族群勞工 '+r.people+' 人（3 人以上未達 10 人），依公告但書至少為 3 個樣本，故本次為 '+r.n+' 個。';
   else if(/未達3人/.test(nt))pp='另本族群勞工 '+r.people+' 人（未達 3 人），依公告但書全部勞工採樣，故本次為 '+r.n+' 個。';
+  else if(r.people>=10&&r.n===6&&r.mode!=='skip')pp='另本族群勞工 '+r.people+' 人（10 人以上），每次採 6 個樣本。';
   var personal=/區域/.test(r.method||'')?' 公告要求採樣結果須能代表族群之個人暴露，116 年起本項目需改為個人採樣。':'';
   var m=r.mode,fq,txt;
   var lt=S.big?'貴公司勞工人數 100 人以上。':'貴公司勞工人數未達 100 人。';
@@ -770,6 +771,7 @@ function buildAdjDocx(R,G,st){st=st||state;
     var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':'本項目依場所判斷，維持現況點數。');
     T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[pp(k.people)],{jc:'center'})+wCell(W[3],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[4],['維持現況'])+wCell(W[5],[why])+'</w:tr>'});
   T+='</w:tbl>';B.push(T);
+  B.push(wPara('註：每次 6 個樣本之項目，樣本數依族群勞工人數決定：10 人以上為 6 個；3～9 人為 3 個；未達 3 人則全部勞工採樣。',{sz:20,color:'4A5868',before:160}));
   B.push(wPara('註：本次以簡易暴露濃度判定；116 年起完成暴露評估報告後，將依評估結果重新檢討級距與頻率。',{sz:20,color:'4A5868',before:160}));
   var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
   var HD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
