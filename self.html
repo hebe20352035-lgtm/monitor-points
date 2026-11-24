@@ -287,7 +287,7 @@ function compute(cs, S, CH) {
     (g.items || []).forEach(function (it) {
       if (!it.name || !String(it.name).trim()) return;
       var name = String(it.name).trim();
-      function mkKeep(why) { var c0 = parseFloat(it.cur) || 0; keep.push({ seg: g.code || '', segName: g.name || '', item: name, cur: c0, n: c0, freq: 6, keep: true, why: why, method: it.method || '' }); }
+      function mkKeep(why) { var c0 = parseFloat(it.cur) || 0; keep.push({ seg: g.code || '', segName: g.name || '', people: parseFloat(g.people) || 0, item: name, cur: c0, n: c0, freq: 6, keep: true, why: why, method: it.method || '' }); }
       if (/短時間/.test(it.method || '')) { mkKeep('STEL 短時間採樣，不列入新制，照原樣點數'); return; }
       if (PHYS.test(name)) { phys.push(g.code + ' ' + name); mkKeep('物理性，維持現況'); return; }
       var ch = findChem(idx, name);
@@ -778,15 +778,16 @@ function buildAdjDocx(R,G,st){st=st||state;
   if(otherPhys.length)bl.push(uqA(otherPhys.map(function(k){return k.item})).join('、')+'等物理性項目維持現況點數');
   if(bl.length){B.push(wPara('主要變動：',{after:40}));bl.forEach(function(t){B.push(wPara('・'+t,{ind:true,after:40}))})}
   H('三、各項目調整說明');
-  var W=[1300,1300,1000,1050,4988];
-  var hd=['SEG／作業場所','監測項目','點數|上次→本次','監測頻率','調整原因'];
+  var W=[1300,1300,900,1000,1050,4088];
+  var hd=['SEG／作業場所','監測項目','SEG|人數','點數|上次→本次','監測頻率','調整原因'];
+  var pp=function(n){return n>0?n+' 人':'—'};
   var T='<w:tbl><w:tblPr><w:tblW w:w="9638" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(b){return'<w:'+b+' w:val="single" w:sz="4" w:color="000000"/>'}).join('')+'</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:left w:w="80" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+W.map(function(w){return'<w:gridCol w:w="'+w+'"/>'}).join('')+'</w:tblGrid>';
   T+='<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'+hd.map(function(t,i){return wCell(W[i],t.split('|'),{fill:'D9E2EC'})}).join('')+'</w:tr>';
   rows.forEach(function(r){var a=adjReason(r,S);
-    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[r.seg].concat(r.segName?[r.segName]:[]))+wCell(W[1],[r.item])+wCell(W[2],[r.cur+' → '+r.n],{jc:'center'})+wCell(W[3],[a.fq])+wCell(W[4],[a.txt])+'</w:tr>'});
+    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[r.seg].concat(r.segName?[r.segName]:[]))+wCell(W[1],[r.item])+wCell(W[2],[pp(r.people)],{jc:'center'})+wCell(W[3],[r.cur+' → '+r.n],{jc:'center'})+wCell(W[4],[a.fq])+wCell(W[5],[a.txt])+'</w:tr>'});
   kp.forEach(function(k){if(/噪音/.test(k.item)&&!/短時間/.test(k.why||''))return;if(k.why==='物理性，維持現況')return;
     var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':'本項目依場所判斷，維持現況點數。');
-    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[3],['維持現況'])+wCell(W[4],[why])+'</w:tr>'});
+    T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[pp(k.people)],{jc:'center'})+wCell(W[3],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[4],['維持現況'])+wCell(W[5],[why])+'</w:tr>'});
   T+='</w:tbl>';B.push(T);
   B.push(wPara('註：本次以簡易暴露濃度判定；116 年起完成暴露評估報告後，將依評估結果重新檢討級距與頻率。',{sz:20,color:'4A5868',before:160}));
   var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
