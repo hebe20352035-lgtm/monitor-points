@@ -1494,11 +1494,12 @@ $('#farmList').addEventListener('click',function(e){
     document.querySelector('#tabs button[data-t=plan]').click()}
   else if(d.word){var r=f(d.word);if(!r)return;var R=compute(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state,r.id)}
   else if(d.quote){var r=f(d.quote);if(!r)return;var R=compute(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1,r.id)}
-  else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'.json')}
+  else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'_'+todayStr()+'.json')}
   else if(d.getf){var pr=d.getf.split('|'),r=f(pr[0]);if(!r)return;var x=(r.files||[]).find(function(y){return y.kind===pr[1]});if(x)saveBlob(b64Blob(x.b64),x.name)}
   else if(d.copy){var r=f(d.copy);if(r)copyText(r.say||'',t)}
   else if(d.del){var r=f(d.del);if(r)ask('刪除「'+r.name+'」的紀錄？（所有同事都會看不到，無法復原）',function(){farmDel(d.del);renderFarms()})}
 });
+function todayStr(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)}
 function fnSafe(s){return(String(s||'').replace(/[\\/:*?"<>|]/g,'').trim()||'未命名廠').slice(0,60)}
 function farmFile(r){return{v:2,kind:'monitor-farm',state:r.state,farm:r}}
 $('#farmBak').onclick=async function(){
@@ -1508,7 +1509,7 @@ $('#farmBak').onclick=async function(){
   var files=[];use.forEach(function(r,i){var n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;
     files.push({name:k+'/資料.json',data:JSON.stringify(farmFile(r))});
     (r.files||[]).forEach(function(x){var bin=atob(x.b64),u=new Uint8Array(bin.length);for(var j=0;j<bin.length;j++)u[j]=bin.charCodeAt(j);files.push({name:k+'/'+x.name,data:u})})});
-  saveBlob(zipStore(files,'application/zip'),'各廠資料_'+ds+'_'+use.length+'間.zip');
+  saveBlob(zipStore(files,'application/zip'),(use.length===1?fnSafe(use[0].name):fnSafe(use[0].name)+'等'+use.length+'間')+'_'+ds+'.zip');
   toast('已匯出 '+use.length+' 間廠'+(sel.length?'（勾選的）':'（全部）'))};
 $('#farmRes').onclick=function(){$('#farmResFile').click()};
 $('#farmResFile').onchange=async function(){
