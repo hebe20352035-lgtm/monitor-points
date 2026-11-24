@@ -306,8 +306,8 @@ function compute(cs, S, CH) {
       var t = r.tier.key; r.mode = r.ratio === null ? 'nodata' : 'tier';
       if (t === 'pel') setN(r, 3, 6);
       else if (t === 'half') setN(r, 6, 6);
-      else if (t === 'tenth') setN(r, 6, S.mid);
-      else if (t === 'low') setN(r, 6, 1);
+      else if (t === 'tenth') { r.freq = 6; r.n = 3; r.remark = '本級距每次 3 個樣本，且每年應達 6 個樣本'; }
+      else if (t === 'low') { r.freq = 6; r.n = 1; r.remark = '本級距每次 1 個樣本，且每 3 年應達 6 個樣本'; }
       else { setN(r, 6, 6); r.notes.push('缺濃度，暫以6個計'); }
     });
   } else {
@@ -349,7 +349,7 @@ function compute(cs, S, CH) {
       }
     });
   }
-  rows.forEach(function (r) { r.notes = r.notes.filter(Boolean); });
+  rows.forEach(function (r) { if (r.remark) r.notes.push(r.remark); r.notes = r.notes.filter(Boolean); });
 
   var sum = { cur: 0, n: 0, year: 0, keepN: 0, keepYear: 0 };
   rows.forEach(function (r) {
@@ -541,17 +541,34 @@ function missText(G){
 }
 var forceSay=false;
 var PHYSX=/高溫|綜合溫度熱指數|振動|WBGT/i;
+function segCmp(a,b){var x=String(a),y=String(b),nx=x.match(/\d+/),ny=y.match(/\d+/);var px=x.replace(/\d+.*$/,''),py=y.replace(/\d+.*$/,'');if(px===py&&nx&&ny&&+nx[0]!==+ny[0])return +nx[0]-+ny[0];return x<y?-1:x>y?1:0}
+function qKey(x){var k=x.item;if(/噪音/.test(k)&&!/劑量|區域|個人/.test(k))k=/區域/.test(x.method||'')?'區域噪音':'劑量噪音';return k}
+function applyQov(R,st){
+  var ov=(st&&st.qov)||{},r1=function(x){return Math.round(x*10)/10};R.qinfo={};
+  var L=[];R.rows.forEach(function(r){if(r.n>0)L.push(r)});R.keep.forEach(function(k){if(k.n>0)L.push(k)});
+  L.sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
+  R.rows.concat(R.keep).forEach(function(x){x.qk=qKey(x)});
+  var by={},ks=[];L.forEach(function(x){var k=x.qk;if(!by[k]){by[k]=[];ks.push(k)}by[k].push(x)});
+  ks.forEach(function(k){var arr=by[k],auto=0;arr.forEach(function(x){auto+=x.n});auto=r1(auto);R.qinfo[k]={auto:auto};var o=ov[k];if(!o)return;
+    if(o.n!=null&&isFinite(o.n)){var want=r1(Math.max(0,o.n)),diff=r1(want-auto);
+      if(diff>0){arr[0].n=r1(arr[0].n+diff);arr[0].qadj=true}
+      else if(diff<0){var need=-diff;arr.forEach(function(x){if(need<=0)return;var d=Math.min(x.n,need);x.n=r1(x.n-d);need=r1(need-d);x.qadj=true})}}});
+  ks.concat(Object.keys(ov)).forEach(function(k){var o=ov[k];if(!o||o.name==null||o.name==='')return;R.rows.concat(R.keep).forEach(function(x){if(x.qk===k)x.item=o.name})});
+  var S=R.sum;S.n=0;S.year=0;S.keepN=0;S.keepYear=0;
+  R.rows.forEach(function(r){S.n+=r.n;S.year+=r.n*(12/r.freq)});R.keep.forEach(function(k){S.keepN+=k.n;S.keepYear+=k.n*(12/k.freq)});
+  S.final=S.n+S.keepN;S.finalYear=S.year+S.keepYear;return R}
+function computeX(st,SET,CH){return applyQov(compute(st,SET,CH),st)}
 function finRows(R){
   var list=[];
-  R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:r.item,n:r.n,freq:r.freq,note:(r.freq===3?'每3個月':'')+(r.src!=='x95'&&r.ratio!==null?(r.freq===3?'；':'')+'暫用單次結果':'')})});
-  R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:k.item,method:k.method,n:k.n,freq:k.freq,note:k.why})});
-  list.sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
+  R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:r.item,qk:r.qk,n:r.n,freq:r.freq,note:[(r.freq===3?'每3個月':''),(r.src!=='x95'&&r.ratio!==null?'暫用單次結果':''),(r.qadj?'報價數量已調整':''),(r.remark||'')].filter(Boolean).join('；')})});
+  R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:k.item,qk:k.qk,method:k.method,n:k.n,freq:k.freq,note:k.why+(k.qadj?'；報價數量已調整':'')})});
+  list.sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
   return list;
 }
 function update(regen){
   var big=(parseFloat(state.total)||0)>=100;
   var bb=$('#bigBadge');bb.textContent=state.total===''?'—':(big?'100 人以上':'未達 100 人');bb.className='badge';
-  var R=compute(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
+  var R=computeX(state,SET,CH);var S=R.sum;var G=checkData(state,CH);
   var cf=[];state.segs.forEach(function(g){
     if(g.flag&&g.flag.name&&!g.flag.name.soft)cf.push(g.code+' 場所名稱：彙整表「'+g.name+'」，採樣策略表「'+g.flag.name.other+'」');
     if(g.flag&&g.flag.people)cf.push(g.code+' 人數：彙整表 '+g.people+'，採樣策略表 '+g.flag.people.other);
@@ -577,18 +594,17 @@ function update(regen){
     h+='<tr><td colspan="2"><b>合計</b></td><td class="big">'+S.final+'</td><td class="num"><b>'+Math.round(S.finalYear*10)/10+'</b></td><td class="num"><b>'+Math.round(S.finalYear*30)/10+'</b></td><td></td></tr></tbody>';
   }else h='<tbody><tr><td class="hint">填入 SEG 與化學品後，這裡會自動產生報價測點數。</td></tr></tbody>';
   $('#finTbl').innerHTML=h;
-  var agg={};fr.forEach(function(r){var k=r.item;if(/噪音/.test(k)&&!/劑量|區域|個人/.test(k))k=/區域/.test(r.method||'')?'區域噪音':'劑量噪音';agg[k]=(agg[k]||0)+r.n});
-  function qGrp(n){if(/局部排氣/.test(n))return 4;if(/二氧化碳/.test(n))return 5;if(/照度|照明/.test(n))return 6;if(/噪音/.test(n))return /區域/.test(n)&&!/劑量|個人/.test(n)?2:1;if(PHYSX.test(n))return 3;return 0}
-  var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});var q=parseInt($('#qfreq').value)||1;var tot=0,h3='';
-  if(names.length){
+  var q=parseInt($('#qfreq').value)||1;var A=chemAgg(R,q),QI=qItems(A,state),tot=0,h3='';
+  if(QI.length){
     h3='<thead><tr><th colspan="5" style="text-align:left;background:#fff;border-bottom:2px solid var(--accent)">公司名稱：'+esc(state.name||'（未填）')+''+'</th></tr><tr><th>編號</th><th>品名</th><th>數量（點）</th><th>頻率（次）</th><th>小計（點）</th></tr></thead><tbody>';
-    var items=qItems(names,agg,state);var anyE=false;
-    items.forEach(function(it,i){var c=it.n;if(it.en||it.em)anyE=true;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td><input class="qe'+(it.em?' ed':'')+'" data-qk="'+esc(it.key)+'" data-qf="name" value="'+esc(it.name)+'" style="width:100%;min-width:130px"></td><td class="big"><input class="qe'+(it.en?' ed':'')+'" type="number" step="0.1" min="0" data-qk="'+esc(it.key)+'" data-qf="n" value="'+c+'" style="width:70px;text-align:center;font-weight:700"></td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
+    var anyE=false;
+    QI.forEach(function(it,i){var c=it.n;if(it.en||it.em)anyE=true;tot+=c*q;h3+='<tr><td>'+(i+1)+'</td><td><input class="qe'+(it.em?' ed':'')+'" data-qk="'+esc(it.key)+'" data-qf="name" value="'+esc(it.name)+'" style="width:100%;min-width:130px"></td><td class="big"><input class="qe'+(it.en?' ed':'')+'" type="number" step="0.1" min="0" data-qk="'+esc(it.key)+'" data-qf="n" value="'+c+'" style="width:70px;text-align:center;font-weight:700"></td><td class="num">'+q+'</td><td class="num">'+Math.round(c*q*10)/10+'</td></tr>'});
     $('#qReset').style.display=anyE?'':'none';
     h3+='<tr><td colspan="2"><b>合計</b></td><td class="num"><b>'+Math.round(tot/q*10)/10+'</b></td><td class="num">'+q+'</td><td class="num"><b>'+Math.round(tot*10)/10+'</b></td></tr></tbody>';
   }
-  if(!names.length)$('#qReset').style.display='none';$('#chemTbl').innerHTML=h3;window._C={names:names,agg:agg,q:q,tot:tot,items:qItems(names,agg,state)};
-  var rows=R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:(a.seg<b.seg?-1:1)});
+  if(!QI.length)$('#qReset').style.display='none';
+  $('#chemTbl').innerHTML=h3;window._C={items:QI,q:q,tot:tot,auto:R.qinfo};
+  var rows=R.rows.slice().sort(function(a,b){return a.item<b.item?-1:a.item>b.item?1:segCmp(a.seg,b.seg)});
   var h2='<thead><tr><th>項目</th><th>SEG／區域</th><th>人數</th><th>濃度（佔PEL）</th><th>級距</th><th>頻率</th><th class="num">現況</th><th class="num">新制</th><th class="num">增減</th><th>備註</th></tr></thead><tbody>';
   rows.forEach(function(r){
     var dd=r.n-r.cur;var dc=r.skip?'':(dd>0?'up':(dd<0?'down':''));
@@ -675,7 +691,9 @@ function makeSay(R,G){
 var ADJ_RF='<w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="標楷體" w:cs="Times New Roman"/>';
 function xe(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 function wRun(t,o){o=o||{};var sz=o.sz||24;return'<w:r><w:rPr>'+ADJ_RF+(o.b?'<w:b/>':'')+'<w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/>'+(o.color?'<w:color w:val="'+o.color+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xe(t)+'</w:t></w:r>'}
-function wPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?120:o.after)+'" w:line="'+(o.line||360)+'" w:lineRule="auto"/>'+(o.ind?'<w:ind w:left="400" w:hanging="240"/>':'')+'<w:jc w:val="'+(o.jc||'both')+'"/></w:pPr>'+wRun(t,o)+'</w:p>'}
+function wRich(t,o){return String(t==null?'':t).split(/(⟦.*?⟧)/).filter(function(s){return s!==''}).map(function(s){return /^⟦.*⟧$/.test(s)?wRun(s.slice(1,-1),Object.assign({},o,{b:true,color:'C00000'})):wRun(s,o)}).join('')||wRun('',o)}
+function wNote(w,t,qf){return'<w:tbl><w:tblPr><w:tblW w:w="'+w+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right'].map(function(b){return'<w:'+b+' w:val="single" w:sz="12" w:color="C00000"/>'}).join('')+'</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="100" w:type="dxa"/><w:left w:w="140" w:type="dxa"/><w:bottom w:w="100" w:type="dxa"/><w:right w:w="140" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid><w:gridCol w:w="'+w+'"/></w:tblGrid><w:tr><w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/><w:shd w:val="clear" w:color="auto" w:fill="FFF2CC"/></w:tcPr>'+(qf?qPara(t,{sz:24,b:true,color:'C00000',jc:'left',after:0,line:320}):wPara(t,{sz:24,b:true,color:'C00000',jc:'left',after:0,line:320}))+'</w:tc></w:tr></w:tbl>'}
+function wPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?120:o.after)+'" w:line="'+(o.line||360)+'" w:lineRule="auto"/>'+(o.ind?'<w:ind w:left="400" w:hanging="240"/>':'')+'<w:jc w:val="'+(o.jc||'both')+'"/></w:pPr>'+wRich(t,o)+'</w:p>'}
 function wCell(w,lines,o){o=o||{};return'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'<w:vAlign w:val="'+(o.fill?'center':'top')+'"/></w:tcPr>'+lines.map(function(t){return wPara(t,{sz:22,b:!!o.fill,line:300,after:0,jc:o.fill?'center':(o.jc||'both')})}).join('')+'</w:tc>'}
 var CRCT=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
 function crc32(u){var c=0xFFFFFFFF;for(var i=0;i<u.length;i++)c=CRCT[(c^u[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0}
@@ -712,6 +730,7 @@ function adjReason(r,S){
   var nt=(r.notes||[]).join('|'),pp='';
   if(/3～9人/.test(nt))pp='另本族群勞工 '+r.people+' 人（3 人以上未達 10 人），依公告但書至少為 3 個樣本，故本次為 '+r.n+' 個。';
   else if(/未達3人/.test(nt))pp='另本族群勞工 '+r.people+' 人（未達 3 人），依公告但書全部勞工採樣，故本次為 '+r.n+' 個。';
+  if(r.qadj)pp='';
   var personal=/區域/.test(r.method||'')?' 公告要求採樣結果須能代表族群之個人暴露，116 年起本項目需改為個人採樣。':'';
   var m=r.mode,fq,txt;
   var lt=S.big?'貴公司勞工人數 100 人以上。':'貴公司勞工人數未達 100 人。';
@@ -721,12 +740,19 @@ function adjReason(r,S){
   else if(m==='low1'){fq='每 6 個月';txt=judge+lt+'本項目濃度低於容許標準的 1/2，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
   else if(m==='pending'){fq='每 6 個月（暫）';txt=judge+'本項目有其他族群尚無數據或濃度達 1/2 容許標準以上，公告附表未規範此情形，暫以 '+r.n+' 個樣本計。'+(pp?' '+pp:'')}
   else{fq='每 '+r.freq+' 個月';txt=judge+lt+'屬「'+r.tier.label+'」，依公告每 '+r.freq+' 個月監測一次，每次 '+r.n+' 個樣本。'+(pp?' '+pp:'')}
-  return{fq:fq,txt:txt+personal}
+  if(pp)txt=txt.replace(pp,'⟦'+pp+'⟧');
+  var P=r.people>0?r.people+' 人':'—',hl='';
+  if(!r.skip){
+    if(r.qadj)hl='⟦本次報價樣本數調整為 '+r.n+' 個（本族群勞工 '+P+'）⟧。';
+    else if(r.remark)hl='⟦本級距樣本數不依 SEG 人數調整，每次採 '+r.n+' 個樣本⟧。';
+    else if(!pp)hl='⟦本族群勞工 '+P+(r.people>=10?'（10 人以上）':'')+'，每次採 '+r.n+' 個樣本⟧。';
+    if(r.remark)hl+=' ⟦'+r.remark+'⟧。'}
+  return{fq:fq,txt:txt+(hl?' '+hl:'')+personal}
 }
 function buildAdjDocx(R,G,st){st=st||state;
   var S=R.sum,now=new Date(),roc=(now.getFullYear()-1911)+' 年 '+(now.getMonth()+1)+' 月 '+now.getDate()+' 日';
   var cname=fullName(st)||'（客戶名稱）';
-  var rows=R.rows.slice().sort(function(a,b){return a.seg<b.seg?-1:a.seg>b.seg?1:(a.item<b.item?-1:1)});
+  var rows=R.rows.slice().sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
   var pending=rows.filter(function(r){return r.mode==='pending'});
   var nNo=rows.filter(function(r){return r.mode==='nodata'}).length;
   var skipItems=[];rows.forEach(function(r){if(r.mode==='skip'&&skipItems.indexOf(r.item)<0)skipItems.push(r.item)});
@@ -741,7 +767,9 @@ function buildAdjDocx(R,G,st){st=st||state;
   if(!G.complete)B.push(wPara('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】',{sz:22,color:'C0392B',jc:'center',b:true}));
   B.push(wPara('作業環境監測點數調整說明',{sz:36,b:true,color:'12355B',jc:'center',after:60}));
   B.push(wPara(cname,{sz:28,b:true,jc:'center',after:40}));
-  B.push(wPara('安平技術顧問有限公司　'+roc,{sz:22,color:'4A5868',jc:'center',after:240}));
+  B.push(wPara('安平技術顧問有限公司　'+roc,{sz:22,color:'4A5868',jc:'center',after:160}));
+  B.push(wNote(9638,'提醒：若針對樣本數量有疑慮，請確認作業區實際作業人數，再由我司重新評估。'));
+  B.push(wPara('',{after:80}));
   var H=function(t){B.push(wPara(t,{sz:26,b:true,color:'12355B',keep:true,before:200,after:80}))};
   H('一、調整依據');
   B.push(wPara('勞動部 115 年 11 月 19 日勞職授字第1150254044A號公告「雇主應實施作業環境監測之作業場所應監測對象、採樣數量及頻率等事項」，自 116 年 1 月 1 日施行。監測改以「相似暴露族群」為單位：每一族群之每一監測項目須先完成初始採樣（至少 6 個樣本），之後依事業單位勞工人數及暴露濃度級距，決定定期監測頻率與樣本數；族群勞工 3 人以上未達 10 人者至少 3 個樣本，未達 3 人者全部勞工採樣。'));
@@ -810,13 +838,13 @@ function qTbl(W,head,rows,o){o=o||{};var tw=W.reduce(function(a,b){return a+b},0
   if(head)T+='<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>'+head.map(function(h,i){return qCell(W[i],h,{fill:'1F5A46',color:'FFFFFF',b:true,jc:'center'})}).join('')+'</w:tr>';
   rows.forEach(function(r){T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+r.map(function(c,i){return qCell(c.w||W[i],c.t,c)}).join('')+'</w:tr>'});
   return T+'</w:tbl>'}
-function qItems(names,agg,st){var ov=(st&&st.qov)||{};return names.map(function(k){var o=ov[k]||{},a=Math.round(agg[k]*10)/10,hn=o.n!=null&&o.n!==''&&isFinite(o.n),hm=o.name!=null&&o.name!=='';return{key:k,name:hm?o.name:k,n:hn?Math.round(o.n*10)/10:a,auto:a,en:hn,em:hm}})}
 function chemAgg(R,q){
-  var fr=finRows(R),agg={};
-  fr.forEach(function(r){var k=r.item;if(/噪音/.test(k)&&!/劑量|區域|個人/.test(k))k=/區域/.test(r.method||'')?'區域噪音':'劑量噪音';agg[k]=(agg[k]||0)+r.n});
+  var fr=finRows(R),agg={},dn={};
+  fr.forEach(function(r){var k=r.qk||qKey(r);agg[k]=(agg[k]||0)+r.n;dn[k]=r.item});
   function qGrp(n){if(/局部排氣/.test(n))return 4;if(/二氧化碳/.test(n))return 5;if(/照度|照明/.test(n))return 6;if(/噪音/.test(n))return /區域/.test(n)&&!/劑量|個人/.test(n)?2:1;if(PHYSX.test(n))return 3;return 0}
   var names=Object.keys(agg).sort(function(x,y){var d=qGrp(x)-qGrp(y);return d||(x<y?-1:x>y?1:0)});
-  return{fr:fr,agg:agg,names:names}}
+  return{fr:fr,agg:agg,names:names,dn:dn,auto:R.qinfo||{}}}
+function qItems(A,st){var ov=(st&&st.qov)||{};return A.names.map(function(k){var o=ov[k]||{},c=Math.round(A.agg[k]*10)/10;return{key:k,name:A.dn[k],n:c,en:o.n!=null&&isFinite(o.n),em:o.name!=null&&o.name!==''}})}
 function buildQuoteDocx(R,G,st,q){
   var S=R.sum,now=new Date(),dt=now.getFullYear()+'/'+('0'+(now.getMonth()+1)).slice(-2)+'/'+('0'+now.getDate()).slice(-2);
   var A=chemAgg(R,q),r1=function(x){return Math.round(x*10)/10};
@@ -831,6 +859,8 @@ function buildQuoteDocx(R,G,st,q){
     [{t:'全廠勞工人數',b:true,fill:'EEF3F0'},{t:(st.total||'—')+' 人'},{t:'報價頻率',b:true,fill:'EEF3F0'},{t:qlab}],
     [{t:'製表日期',b:true,fill:'EEF3F0'},{t:dt,span:3,w:8138}]
   ]));
+  B.push(qPara('',{after:120}));
+  B.push(wNote(9638,'提醒：若針對樣本數量有疑慮，請確認作業區實際作業人數，再由我司重新評估。',true));
   B.push(qPara('',{after:160}));
   var SW=[3212,3213,3213];
   B.push(qTbl(SW,null,[[
@@ -839,7 +869,7 @@ function buildQuoteDocx(R,G,st,q){
     {t:'三年測點　'+r1(S.finalYear*30/10)+' 點',b:true,sz:26,jc:'center',fill:'E2EEE8',color:'1F5A46'}]],{none:true,bc:'FFFFFF'}));
   B.push(qPara('一、各化學品報價數量',{sz:26,b:true,color:'1F5A46',keep:true,before:280,after:100}));
   var W1=[900,4238,1500,1500,1500],rows1=[],tot=0;
-  qItems(A.names,A.agg,st).forEach(function(it,i){var nm=it.name,c=it.n;tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
+  qItems(A,st).forEach(function(it,i){var nm=it.name,c=it.n;tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
   rows1.push([{t:'合計',span:2,w:5138,b:true,fill:'EEF3F0'},{t:String(r1(tot/q)),jc:'center',b:true,fill:'EEF3F0'},{t:String(q),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(tot)),jc:'center',b:true,fill:'EEF3F0'}]);
   B.push(qTbl(W1,['編號','品名','數量（點）','頻率（次）','小計（點）'],rows1));
   B.push(qPara('二、各 SEG 測點數',{sz:26,b:true,color:'1F5A46',keep:true,before:320,after:100}));
@@ -884,7 +914,7 @@ $('#copyTbl').onclick=function(){
 $('#qfreq').onchange=function(){update()};
 $('#chemTbl').addEventListener('change',function(e){var t=e.target;if(!t.getAttribute||!t.getAttribute('data-qk'))return;var k=t.getAttribute('data-qk'),f=t.getAttribute('data-qf'),C=window._C||{},v=t.value.trim();state.qov=state.qov||{};var o=state.qov[k]=state.qov[k]||{};
   if(f==='name'){if(v===''||v===k)delete o.name;else o.name=v}
-  else{var a=Math.round((C.agg&&C.agg[k]||0)*10)/10;if(v===''||!isFinite(v)||parseFloat(v)<0||Math.round(parseFloat(v)*10)/10===a)delete o.n;else o.n=Math.round(parseFloat(v)*10)/10}
+  else{var a=C.auto&&C.auto[k]?C.auto[k].auto:0;if(v===''||!isFinite(v)||parseFloat(v)<0||Math.round(parseFloat(v)*10)/10===a)delete o.n;else o.n=Math.round(parseFloat(v)*10)/10}
   if(o.name==null&&o.n==null)delete state.qov[k];save();update()});
 $('#qReset').onclick=function(){delete state.qov;save();update()};
 $('#copyChem').onclick=function(){var C=window._C;if(!C)return;var L=['公司名稱\t'+(state.name||''),'編號\t品名\t數量(點)\t頻率(次)\t小計(點)'];C.items.forEach(function(it,i){var nm=it.name,c=it.n;L.push([i+1,nm,c,C.q,Math.round(c*C.q*10)/10].join('\t'))});L.push(['合計','',Math.round(C.tot/C.q*10)/10,C.q,Math.round(C.tot*10)/10].join('\t'));copyText(L.join('\n'),this)};
@@ -948,6 +978,7 @@ async function unzipEntry(buf,want){
   }
   throw new Error('找不到 '+want);
 }
+function segCodeOf(cell,strict){var raw=String(cell==null?'':cell).replace(/（/g,'(').replace(/）/g,')').trim();if(!raw)return null;var n=raw.replace(/[\s　]+/g,'');var m=n.match(/SEG[-_－]?\d+/i);if(m)return m[0].toUpperCase();if(strict)return null;var tok=raw.split(/[\s　(]/)[0];if(/^[A-Za-z]{0,4}[-_－]?\d{1,3}[A-Za-z]?$/.test(tok))return tok.toUpperCase();return null}
 function normT(s){return String(s||'').replace(/[\s　]+/g,'').replace(/[（）]/g,function(c){return c==='（'?'(':')'})}
 function pText(p){var s='';var ts=p.getElementsByTagNameNS(W_NS,'t');for(var i=0;i<ts.length;i++)s+=ts[i].textContent;return s}
 function tblGrid(tbl){
@@ -1083,9 +1114,9 @@ function wmfTexts(u8){
 async function picTokens(p){
   try{var data=p.data;if(p.comp===0)data=await inflateBytes(data);return(p.emf?emfTexts(data):wmfTexts(data)).map(function(x){return{x:x.x,y:x.y,t:String(x.t).trim()}}).filter(function(x){return x.t})}catch(e){return[]}
 }
-function parseStatTokens(tk){
+function parseStatTokens(tk,codes){
   var dates=tk.filter(function(a){return /^\d{2,3}[.\/]?\d{2}[.\/]?\d{2}$/.test(a.t)&&a.t.replace(/\D/g,'').length>=6});
-  var segs=tk.filter(function(a){return /^SEG\d+$/i.test(a.t)});
+  var segs=tk.filter(function(a){return /^SEG[-_－]?\d+$/i.test(a.t)||(codes&&codes.indexOf(a.t.toUpperCase())>=0)});
   if(!segs.length||dates.length<2)return null;
   var minX=Math.min.apply(null,segs.map(function(a){return a.x}));
   segs=segs.filter(function(a){return a.x<=minX+80}).sort(function(a,b){return a.y-b.y});
@@ -1154,11 +1185,11 @@ async function parseDocx(file){
   var segs={},order=[];
   function segOf(code,name,dept,people){if(!segs[code]){segs[code]={code:code,name:name||'',group:'',dept:dept||'',people:people||'',items:[],_i:{}};order.push(code)}return segs[code]}
   if(t3){
-    var g=t3.grid,hd=g[t3.hi];var cc=findCol(hd,[/SEG|相似暴露族群\(?代號/]),cn=findCol(hd,[/作業場所/]),cp=findCol(hd,[/作業人數|人數/]),ci=findCol(hd,[/暴露危害物質/]),cd=findCol(hd,[/部門/]);
-    if(cc<0)cc=hd.length-1;
+    var g=t3.grid,hd=g[t3.hi];var cc=findCol(hd,[/SEG|相似暴露族群\(?代號|^代號|^代碼/]),cn=findCol(hd,[/作業場所/]),cp=findCol(hd,[/作業人數|人數/]),ci=findCol(hd,[/暴露危害物質/]),cd=findCol(hd,[/部門/]);
+    var ccStrict=false;if(cc<0){cc=hd.length-1;ccStrict=true}
     var cnt=0;
     for(var r=t3.hi+1;r<g.length;r++){
-      var row=g[r];var code=normT(row[cc]).match(/SEG\d+/i);if(!code)continue;code=code[0].toUpperCase();
+      var row=g[r];var code=segCodeOf(row[cc],ccStrict);if(!code)continue;
       var s=segOf(code,(row[cn]||'').replace(/\n/g,''),row[cd]||'',(String(row[cp]||'').match(/\d+/)||[''])[0]);
       s.group=s.dept;
       cnt++;
@@ -1167,12 +1198,12 @@ async function parseDocx(file){
   }else res.notes.push('找不到「相似暴露族群及暴露危害物質彙整表」');
   var allItems=[];
   if(t9){
-    var g9=t9.grid,h9=g9[t9.hi];var c9s=findCol(h9,[/SEG|相似暴露族群\(?代號/]),c9n=findCol(h9,[/作業場所/]),c9p=findCol(h9,[/人數/]),c9i=findCol(h9,[/暴露危害物質|採樣點數/]),c9m=findCol(h9,[/採樣方式/]);
-    if(c9s<0)c9s=h9.length-1;
+    var g9=t9.grid,h9=g9[t9.hi];var c9s=findCol(h9,[/SEG|相似暴露族群\(?代號|^代號|^代碼/]),c9n=findCol(h9,[/作業場所/]),c9p=findCol(h9,[/人數/]),c9i=findCol(h9,[/暴露危害物質|採樣點數/]),c9m=findCol(h9,[/採樣方式/]);
+    var c9Strict=false;if(c9s<0){c9s=h9.length-1;c9Strict=true}
     var c9=0;
     for(var rf=t9.hi+2;rf<g9.length;rf++){[c9s,c9n,c9p].forEach(function(ci){if(ci>=0&&g9[rf][ci]===''&&g9[rf][c9i]&&g9[rf-1][ci])g9[rf][ci]=g9[rf-1][ci]})}
     for(var r2=t9.hi+1;r2<g9.length;r2++){
-      var rw=g9[r2];var cs=normT(rw[c9s]);var m=cs.match(/SEG\d+/i);var code2=m?m[0].toUpperCase():'全廠';
+      var rw=g9[r2];var cs=normT(rw[c9s]);var code2=segCodeOf(rw[c9s],c9Strict)||'全廠';
       var place=(rw[c9n]||'').replace(/\n/g,'');
       var s2;
       if(code2==='全廠'){s2=segOf('全廠',place||'全廠區','','')}
@@ -1193,7 +1224,7 @@ async function parseDocx(file){
     res.ok.push('採樣策略彙整表：'+c9+' 筆項目點數');
   }else res.notes.push('找不到「作業環境監測計畫採樣策略彙整表」');
   var statRows=null;
-  for(var pi=0;pi<(raw.pics||[]).length&&!statRows;pi++){var tk=await picTokens(raw.pics[pi]);statRows=parseStatTokens(tk)}
+  for(var pi=0;pi<(raw.pics||[]).length&&!statRows;pi++){var tk=await picTokens(raw.pics[pi]);statRows=parseStatTokens(tk,order.slice())}
   if(statRows&&statRows.length){res.stat=statRows}
   else res.notes.push('找不到歷年統計表（X95），濃度需另外提供');
   res.segs=order.filter(function(c){if(c==='全廠'||segs[c].items.length)return true;res.notes.push(c+' 只在彙整表，採樣策略表沒有項目，已不列入（以採樣策略表為主）');return false}).map(function(c){var s=segs[c];s.items.forEach(function(i){if(i.cur===''&&c!=='全廠')i.flag='cur'});return{code:s.code,name:s.name,group:'',people:s.people,flag:s.flag,items:(s.items.length?s.items:[{name:'',cur:'',conc:'',src:'x95',unit:'',pel:''}]).map(function(i){var o={name:i.name,cur:i.cur,conc:'',src:'single',unit:'',pel:''};if(i.method)o.method=i.method;if(i.flag)o.flag=i.flag;if(i.sflag)o.sflag=i.sflag;return o})}});
@@ -1248,7 +1279,7 @@ function applyConc(text){
     if(p.length<3||/^化學品/.test(p[0]))return;
     var chem=p[0],place=p[1],val=String(p[2]).replace(/[<＜\s]/g,''),unit=p[3]||'';
     if(!/^[\d.]+$/.test(val)){rep.miss.push(ln+'（濃度不是數字）');return}
-    var pc=placeCore(place),codeM=place.match(/SEG\d+/i);
+    var pc=placeCore(place),codeM=place.match(/SEG[-_－]?\d+/i);if(!codeM)state.segs.forEach(function(g0){if(!codeM&&g0.code&&new RegExp('(^|[^A-Za-z0-9])'+String(g0.code).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'($|[^A-Za-z0-9])','i').test(place))codeM=[g0.code]});
     var seg=state.segs.filter(function(g){
       if(codeM&&g.code.toUpperCase()===codeM[0].toUpperCase())return true;
       var gc=placeCore(g.name);return gc&&pc&&gc===pc});
@@ -1300,7 +1331,7 @@ function gridToStat(g){
     if(cs<0||cn<0||cv<0)continue;
     var lastSeg='';
     for(var r=h+1;r<g.length;r++){
-      var row=g[r];var sm=normT(row[cs]).match(/SEG\d+/i);if(sm)lastSeg=sm[0].toUpperCase();else if(normT(row[cs]))continue;
+      var row=g[r];var sm=segCodeOf(row[cs]);if(sm)lastSeg=sm;else if(normT(row[cs]))continue;
       var nm=String(row[cn]||'').trim();if(!nm||!lastSeg)continue;
       var v=String(row[cv]||'').replace(/[<＜\s]/g,'');if(!/^\d*\.?\d+$/.test(v))continue;v=String(parseFloat(parseFloat(v).toPrecision(6)));
       out.push({seg:lastSeg,name:nm,unit:cu>=0?String(row[cu]||'').trim():'',x95:v})}
@@ -1426,7 +1457,7 @@ function farmFlush(){
   if(state.fid&&gone[state.fid])return;
   if(!state.fid)state.fid='f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
   var a=FARMS,i=a.findIndex(function(x){return x.id===state.fid}),old=i>=0?a[i]:null;
-  var R=compute(state,SET,CH),G=checkData(state,CH),S=R.sum;
+  var R=computeX(state,SET,CH),G=checkData(state,CH),S=R.sum;
   var rec={id:state.fid,name:fullName(state)||'（未填客戶名稱）',status:old?old.status:'進行中',note:old?old.note:'',files:old&&old.files?old.files:[],upd:Date.now(),
     state:JSON.parse(JSON.stringify(state)),sayEdit:sayDirty?$('#say').value:'',style:$('#sayStyle').value,say:$('#say').value,
     quote:$('#chemTbl').innerHTML.replace(/<input[^>]*value="([^"]*)"[^>]*>/g,'$1'),fin:$('#finTbl').innerHTML,detail:$('#resTbl').innerHTML,qf:$('#qfreq').value,
@@ -1493,8 +1524,8 @@ $('#farmList').addEventListener('click',function(e){
   if(d.open){var r=f(d.open);if(!r)return;farmFlush();state=JSON.parse(JSON.stringify(r.state));state.fid=r.id;syncTop();renderSegs();sayDirty=false;$('#sayStyle').value=r.style||'1';$('#impReport').innerHTML='';save();update(true);
     if(r.sayEdit){$('#say').value=r.sayEdit;sayDirty=true}
     document.querySelector('#tabs button[data-t=plan]').click()}
-  else if(d.word){var r=f(d.word);if(!r)return;var R=compute(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state,r.id)}
-  else if(d.quote){var r=f(d.quote);if(!r)return;var R=compute(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1,r.id)}
+  else if(d.word){var r=f(d.word);if(!r)return;var R=computeX(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state,r.id)}
+  else if(d.quote){var r=f(d.quote);if(!r)return;var R=computeX(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1,r.id)}
   else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'_'+todayStr()+'.json')}
   else if(d.getf){var pr=d.getf.split('|'),r=f(pr[0]);if(!r)return;var x=(r.files||[]).find(function(y){return y.kind===pr[1]});if(x)saveBlob(b64Blob(x.b64),x.name)}
   else if(d.copy){var r=f(d.copy);if(r)copyText(r.say||'',t)}
@@ -1542,11 +1573,10 @@ $('#tabs').onclick=function(e){var b=e.target.closest('button');if(!b)return;
   ['plan','chem','farm','set'].forEach(function(t){var el=$('#t-'+t);if(el)el.hidden=(b.dataset.t!==t)});if(b.dataset.t==='farm'){farmFlush();renderFarms()}};
 function renderSet(){
   if(MODE!=='self')return;
-  $('#setProv').checked=!!SET.proviso;$('#setMid').value=String(SET.mid);$('#setTie').value=SET.tie;
+  $('#setProv').checked=!!SET.proviso;$('#setTie').value=SET.tie;
 }
 if(MODE==='self'){
   $('#setProv').onchange=function(){SET.proviso=this.checked;save();update(true)};
-  $('#setMid').onchange=function(){SET.mid=parseInt(this.value,10);save();update(true)};
   $('#setTie').onchange=function(){SET.tie=this.value;save();update(true)};
   var ex=$('#loadEx');if(ex)ex.onclick=function(){
     state={name:'範例工廠',total:'51',segs:[
