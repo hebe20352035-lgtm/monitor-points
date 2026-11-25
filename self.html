@@ -296,7 +296,7 @@ function compute(cs, S, CH) {
       if (ch && ch.m === '依場所判斷') { mkKeep('依場所判斷，維持現況'); return; }
       var unit = it.unit || defaultUnit(ch);
       var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
-      if (isNaN(pel)) { mkKeep('無容許濃度標準，維持現況'); return; }
+      if (isNaN(pel)) { mkKeep('公告容許濃度標準無數值，維持現況'); return; }
       var c = parseConc(it.conc);
       var src = it.src || 'x95';
       var ratio = (!isNaN(c.v) && !isNaN(pel) && pel > 0) ? c.v / pel : null;
@@ -655,7 +655,8 @@ function makeSay(R,G){
   var uq=function(a){return a.filter(function(v,i,x){return x.indexOf(v)===i})};
   var hi=uq(R.rows.filter(function(r){return r.tier.key==='pel'&&!r.skip}).map(function(r){return r.seg+' '+r.item}));
   var stl=uq(R.keep.filter(function(k){return k.n>0&&/短時間/.test(k.why||'')}).map(function(k){return k.item}));
-  var kp=uq(R.keep.filter(function(k){return k.n>0&&!/短時間/.test(k.why||'')}).map(function(k){return k.item}));
+  var kp=uq(R.keep.filter(function(k){return k.n>0&&!/短時間|標準無數值/.test(k.why||'')}).map(function(k){return k.item}));
+  var kpNp=uq(R.keep.filter(function(k){return /標準無數值/.test(k.why||'')}).map(function(k){return k.item}));
   var P=d===0?('維持 '+S.cur+' 點'):('由現行 '+S.cur+' 點調整為 '+S.final+' 點');
   var act=R.rows.filter(function(r){return !r.skip});
   var nSkip=R.rows.length-act.length;
@@ -671,33 +672,34 @@ function makeSay(R,G){
   var sHi=hi.length?hi.join('、')+' 的濃度已達容許標準，依新制須每 3 個月監測一次，這部分會比較有感。':'';
   var sSt=stl.length?stl.join('、')+'因 STEL 短時間採樣不列為新制法規規範，故照原樣點數採樣。':'';
   var sKp=kp.length?kp.join('、')+'不在新制規範內，點數維持不變。':'';
+  var sNp=kpNp.length?kpNp.join('、')+'依職安署公告，其容許濃度標準沒有數值，無法判定級距，故維持原測點數量。':'';
   var add=function(x){if(x)L.push(x)};
   if(st===1){
     L.push('您好，勞動部的新修法從 116 年 1 月 1 日開始上路，作業環境監測的樣本數要改依勞工人數和各區濃度級距重新計算，所以這次'+(up?'點數會比以往多一些，這是法規調整，不是我們額外加價。':'點數會依新制重新核算。'));
     L.push('我們已經依貴廠歷次的監測結果逐項評估，用法規允許的最少點數來報價，每輪監測'+P+'。');
-    add(same);add(sHi?'另外 '+sHi+'也建議一起評估改善。':'');add(sSt);add(sKp);
+    add(same);add(sHi?'另外 '+sHi+'也建議一起評估改善。':'');add(sSt);add(sKp);add(sNp);
     L.push('實際採樣內容我們會再跟您確認，有任何疑問都歡迎隨時跟我們說。');
   }else if(st===2){
     L.push('您好，謝謝貴廠一直以來的配合。這次想先跟您說明一下，因為勞動部新修法 116 年 1 月 1 日起實施，作業環境監測的測點要依勞工人數和濃度級距重新計算，所以報價的測點數有些調整，每輪'+P+'。');
     L.push('我們評估時已盡量以法規允許的最少點數處理。'+same);
-    add(sHi);add(sSt);add(sKp);
+    add(sHi);add(sSt);add(sKp);add(sNp);
     L.push('若您對哪個項目有疑問，我們很樂意逐項說明，也再麻煩您參考看看，謝謝。');
   }else if(st===3){
     L.push('您好，這次測點數'+(up?'增加':'調整')+'，是因為勞動部新修法自 116 年 1 月 1 日起實施，監測的樣本數與頻率改依勞工人數及濃度級距認定。這是法規的強制規定，我們也沒有調整的空間，只能依規定辦理。');
     L.push('在法規範圍內，我們已用允許的最少點數評估，每輪'+P+'。'+same);
-    add(sHi);add(sSt);add(sKp);
+    add(sHi);add(sSt);add(sKp);add(sNp);
     L.push('若未依新制規定辦理，會有不符合法規的風險，所以還是建議依此規劃。有任何疑問，我們再向您說明。');
   }else if(st===4){
     L.push('您好，了解貴廠對'+(up?'測點變多、':'')+'金額變動的疑慮，我們也能體會預算上的壓力。');
     L.push('這次的變動並不是我們調整報價方式，而是勞動部新修法自 116 年 1 月 1 日起，監測樣本數改依勞工人數和濃度級距計算，每輪測點'+P+(up?'，增加 '+d+' 點':'')+'，金額的變化主要來自測點數。');
     L.push('我們已逐項依貴廠歷次監測結果，以法規允許的最少點數報價。'+same);
-    add(sHi);add(sSt);add(sKp);
+    add(sHi);add(sSt);add(sKp);add(sNp);
     L.push('若對哪一項有疑問，歡迎隨時跟我們討論，我們很樂意為您說明。');
   }else if(st===6){
     L.push('您好，這個我直接跟您說清楚。');
     L.push('這次測點'+(up?'增加':'調整')+'，主要是因為勞動部修法了：《勞工作業環境監測實施辦法》115 年 6 月修正，115 年 11 月 19 日又以勞職授字第 1150254044A 號公告「雇主應實施作業環境監測之監測對象、採樣數量及頻率等事項」，116 年 1 月 1 日起，樣本數要依人數和濃度級距重新計算。雇主依《職業安全衛生法》第 12 條本來就要實施作業環境監測，新規定出來後，我們也是照新規定重新幫貴廠評估，並不是單方面調整。');
     L.push('我們能做的，是報價時只用法規允許的最少點數，每輪'+P+'。'+same);
-    add(sHi);add(sSt);add(sKp);
+    add(sHi);add(sSt);add(sKp);add(sNp);
     L.push('公告原文在勞動部網站和全國法規資料庫都查得到。');
   }else{
     L.push('您好，因勞動部新修法 116/1/1 起實施，監測測點改依人數與濃度級距計算，每輪'+P+'，我們已用法規允許的最少點數報價。');
@@ -803,6 +805,8 @@ function buildAdjDocx(R,G,st){st=st||state;
   if(nPro)bl.push('族群人數未達 10 人者，依公告但書調整樣本數');
   if(nPers)bl.push('區域採樣項目於 116 年起需改為個人採樣');
   if(stl.length)bl.push(uqA(stl.map(function(k){return k.item})).join('、')+'因 STEL 短時間採樣不列為新制法規規範，照原樣點數採樣');
+  var noPel=kp.filter(function(k){return /標準無數值/.test(k.why||'')});
+  if(noPel.length)bl.push(uqA(noPel.map(function(k){return k.item})).join('、')+'依職安署公告，容許濃度標準沒有數值，故維持原測點數量');
   if(nonlegal.length)bl.push(uqA(nonlegal.map(function(k){return k.item})).join('、')+'不在新制規範內，維持現況點數');
   if(otherPhys.length)bl.push(uqA(otherPhys.map(function(k){return k.item})).join('、')+'等物理性項目維持現況點數');
   if(bl.length){B.push(wPara('主要變動：',{after:40}));bl.forEach(function(t){B.push(wPara('・'+t,{ind:true,after:40}))})}
@@ -815,7 +819,7 @@ function buildAdjDocx(R,G,st){st=st||state;
   rows.forEach(function(r){var a=adjReason(r,S);
     T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[r.seg].concat(r.segName?[r.segName]:[]))+wCell(W[1],[r.item])+wCell(W[2],[pp2(r.people)],{jc:'center'})+wCell(W[3],[r.cur+' → '+r.n],{jc:'center'})+wCell(W[4],[a.fq])+wCell(W[5],[a.txt])+'</w:tr>'});
   kp.forEach(function(k){if(/噪音/.test(k.item)&&!/短時間/.test(k.why||''))return;if(k.why==='物理性，維持現況')return;
-    var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':'本項目依場所判斷，維持現況點數。');
+    var why=/短時間/.test(k.why||'')?'STEL 短時間採樣不列為新制法規規範，照原樣點數採樣。':(/非法定/.test(k.why||'')?'本項目非屬新制規範之法定監測項目，維持現況點數。':(/標準無數值/.test(k.why||'')?'依職安署公告，本項目之容許濃度標準沒有數值，無法判定級距，故維持原測點數量。':'本項目依場所判斷，維持現況點數。'));
     T+='<w:tr><w:trPr><w:cantSplit/></w:trPr>'+wCell(W[0],[k.seg].concat(k.segName?[k.segName]:[]))+wCell(W[1],[k.item])+wCell(W[2],[pp2(k.people)],{jc:'center'})+wCell(W[3],[k.cur+' → '+k.n],{jc:'center'})+wCell(W[4],['維持現況'])+wCell(W[5],[why])+'</w:tr>'});
   T+='</w:tbl>';B.push(T);
   B.push(wPara('註：本次以簡易暴露濃度判定；116 年起完成暴露評估報告後，將依評估結果重新檢討級距與頻率。',{sz:20,color:'4A5868',before:160}));
