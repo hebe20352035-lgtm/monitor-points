@@ -1672,7 +1672,7 @@ $('#sgApply').onclick=function(){
 function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
 $('#sgExp').onclick=function(){
   var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
-  var nd=SG.dates.length,cells={},merges=[];
+  var nd=SG.dates.length,cells={},merges=[],FNROW=-1;
   function put(r,c,v,st){cells[r+','+c]={v:v,s:st}}
   var cX=4+nd,cM=cX+1,cL=cX+2;
   ['SEG代號','化學品','容許濃度','單位'].forEach(function(t,i){put(0,i,t,1);put(1,i,'',1);merges.push(sgColL(i)+'1:'+sgColL(i)+'2')});
@@ -1684,26 +1684,28 @@ $('#sgExp').onclick=function(){
     SG.dates.forEach(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);put(rr,4+j,p?p.n:'',p?(p.nd?4:3):2)});
     put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2);put(rr,cM,c.method,2);put(rr,cL,c.lv||'',2)});
   var rr=2+rows.length;
-  ['1.95%的信賴區間推估出該相似暴露群之平均暴露濃度(使用MS-Excel之內建函數(PERCENTILE) 計算求得)；未滿6次者取最高值','2.暴露等級= X95<0.5PEL為第一級；0.5PEL≦ X95<PEL為第二級；X95≧PEL為第三級','3.粗體為無「<」之實測值，細體為報告上有「<」(低於定量極限) 之值；分級管理措施詳監測報告'].forEach(function(t,k){put(rr+k,0,t,5)});
-  rr+=4;put(rr,0,'SEG與監測處所對照',5);
+  var FNT='1.95%的信賴區間推估出該相似暴露群之平均暴露濃度(使用MS-Excel之內建函數(PERCENTILE) 計算求得)\n2.暴露等級= X95<0.5PEL為第一級；0.5PEL≦ X95<PEL為第二級；X95≧PEL為第三級\n3.分級管理措施詳監測報告';
+  put(rr,0,FNT,7);for(var c=1;c<=cL;c++)put(rr,c,'',7);merges.push('A'+(rr+1)+':'+sgColL(cL)+(rr+1));FNROW=rr;
+  rr+=2;put(rr,0,'SEG與監測處所對照',5);
   var mp=[],seen={};state.segs.forEach(function(g){var k=String(g.code);if(k&&!seen[k]){seen[k]=1;mp.push([k,g.name||''])}});
   mp.forEach(function(a,i){put(rr+1+i,0,a[0],6);put(rr+1+i,1,a[1],5)});
   var maxR=0,maxC=0;Object.keys(cells).forEach(function(k){var a=k.split(',');maxR=Math.max(maxR,+a[0]);maxC=Math.max(maxC,+a[1])});
   var sd='';
   for(var r=0;r<=maxR;r++){var rx='';for(var c=0;c<=maxC;c++){var x=cells[r+','+c];if(!x)continue;var ref=sgColL(c)+(r+1);
     if(typeof x.v==='number')rx+='<c r="'+ref+'" s="'+x.s+'"><v>'+x.v+'</v></c>';else rx+='<c r="'+ref+'" s="'+x.s+'" t="inlineStr"><is><t xml:space="preserve">'+xe(x.v)+'</t></is></c>'}
-    if(rx)sd+='<row r="'+(r+1)+'">'+rx+'</row>'}
+    if(rx)sd+='<row r="'+(r+1)+'"'+(r===FNROW?' ht="64" customHeight="1"':'')+'>'+rx+'</row>'}
   var cols='<cols><col min="1" max="1" width="11" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="4" width="9" customWidth="1"/><col min="5" max="'+(4+nd)+'" width="11" customWidth="1"/><col min="'+(cX+1)+'" max="'+(cX+1)+'" width="14" customWidth="1"/><col min="'+(cM+1)+'" max="'+(cM+1)+'" width="18" customWidth="1"/><col min="'+(cL+1)+'" max="'+(cL+1)+'" width="22" customWidth="1"/></cols>';
   var sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+cols+'<sheetData>'+sd+'</sheetData><mergeCells count="'+merges.length+'">'+merges.map(function(m){return'<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells></worksheet>';
   var bd='<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>';
-  var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="11"/><name val="新細明體"/></font><font><b/><sz val="11"/><name val="新細明體"/></font><font><sz val="11"/><color rgb="FF1F4E9E"/><name val="Times New Roman"/></font><font><sz val="11"/><name val="Times New Roman"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7">'+
+  var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="11"/><name val="新細明體"/></font><font><b/><sz val="11"/><name val="新細明體"/></font><font><sz val="11"/><color rgb="FF1F4E9E"/><name val="Times New Roman"/></font><font><sz val="11"/><name val="Times New Roman"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'<border><left style="thin"><color rgb="FF1F7A4D"/></left><right style="thin"><color rgb="FF1F7A4D"/></right><top style="thin"><color rgb="FF1F7A4D"/></top><bottom style="thin"><color rgb="FF1F7A4D"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="8">'+
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
   '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
   '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
   '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
   '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="left"/></xf>'+
-  '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf></cellXfs></styleSheet>';
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="left" vertical="center" wrapText="1"/></xf></cellXfs></styleSheet>';
   var files=[{name:'[Content_Types].xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
   {name:'_rels/.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
   {name:'xl/workbook.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="工作表1" sheetId="1" r:id="rId1"/></sheets></workbook>'},
