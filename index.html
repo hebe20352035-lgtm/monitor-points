@@ -1646,7 +1646,7 @@ function sgCalc(r){
   var o={n:vs.length,pel:r.inf.pel};
   if(!vs.length){o.method='待填';return o}
   var nums=vs.map(function(p){return p.n});
-  if(vs.length>=6){o.x=sgPct(nums.slice(-10),0.95);o.method='第95百分位'}else{o.x=Math.max.apply(null,nums);o.method='取最高值（'+vs.length+'次）'}
+  if(vs.length>=6){o.x=sgPct(nums,0.95);o.method='第95百分位'}else{o.x=Math.max.apply(null,nums);o.method='取最高值（'+vs.length+'次）'}
   o.lv=isNaN(o.pel)?'待確認':(o.x>=o.pel?'第三級':(o.x>=o.pel*0.5?'第二級':'第一級'));
   return o}
 function sgRender(){
@@ -1666,7 +1666,7 @@ $('#sgModal').addEventListener('change',function(e){var t=e.target;
   if(t.dataset.sk){var d=SG.vals[t.dataset.sk],j=+t.dataset.sc,raw=t.value.trim();if(/[<＜]/.test(raw))d.nd[j]=true;d.v[j]=raw.replace(/[<＜]/g,'');sgSave();setTimeout(sgRender,0)}});
 $('#sgModal').addEventListener('click',function(e){var t=e.target;
   if(t.dataset.slt){var q=t.dataset.slt.split('|'),j=+q.pop(),k=q.join('|');var d=SG.vals[k];d.nd[j]=!d.nd[j];sgSave();sgRender()}});
-$('#sgAddR').onclick=function(){if(SG.dates.length>=10){alert('最多 10 次');return}SG.dates.push('');Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.push('');SG.vals[k].nd.push(false)});sgSave();sgRender()};
+$('#sgAddR').onclick=function(){if(SG.dates.length>=30){alert('最多 30 次');return}SG.dates.push('');Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.push('');SG.vals[k].nd.push(false)});sgSave();sgRender()};
 $('#sgDelR').onclick=function(){if(SG.dates.length<=1)return;var j=SG.dates.length-1;if(Object.keys(SG.vals).some(function(k){return SG.vals[k].v[j]})&&!confirm('最後一次已有數據，確定刪除？'))return;SG.dates.pop();Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.pop();SG.vals[k].nd.pop()});sgSave();sgRender()};
 $('#sgClear').onclick=function(){if(!confirm('清空所有已填的數值？'))return;SG={dates:['','','','','',''],vals:{}};sgSave();sgRender()};
 /* ---------- 統計表產生器：匯入歷年報告（Excel 報告書的「彙整表」工作表） ---------- */
@@ -1724,11 +1724,14 @@ $('#sgFile').onchange=async function(){
       else{all=all.concat(res.ents);if(res.co&&cos.indexOf(res.co)<0)cos.push(res.co)}}
     catch(e){msgs.push(files[i].name+'：讀取失敗')}}
   if(!all.length){$('#sgRep').innerHTML='<span style="color:#B42318">'+esc(msgs.join('；')||'沒有讀到資料')+'</span>';return}
-  var dates=[];all.forEach(function(e){if(dates.indexOf(e.date)<0)dates.push(e.date)});dates.sort();
-  if(dates.length>10){msgs.push('超過 10 次，只取最近 10 次');dates=dates.slice(-10)}
-  SG={dates:dates,vals:{}};
+  var oldD=SG.dates,oldV=SG.vals,dates=[];
+  oldD.forEach(function(d){if(d&&dates.indexOf(d)<0)dates.push(d)});
+  all.forEach(function(e){if(dates.indexOf(e.date)<0)dates.push(e.date)});dates.sort();
+  if(dates.length>30){msgs.push('超過 30 次，只取最近 30 次');dates=dates.slice(-30)}
+  var nv={};Object.keys(oldV).forEach(function(k){var o=oldV[k],a={v:dates.map(function(){return''}),nd:dates.map(function(){return false})};
+    oldD.forEach(function(d,j){var n=dates.indexOf(d);if(d&&n>=0){a.v[n]=o.v[j]||'';a.nd[n]=!!o.nd[j]}});nv[k]=a});
+  SG={dates:dates,vals:nv};
   var rows=sgRows(),used=[],matchedCnt=0;
-  rows.forEach(function(r){r.d.v=dates.map(function(){return''});r.d.nd=dates.map(function(){return false})});
   all.forEach(function(e,ei){
     var j=dates.indexOf(e.date);if(j<0)return;
     var cand=rows.filter(function(r){return sgSameChem(r.it.name,e.name)});
@@ -1743,7 +1746,7 @@ $('#sgFile').onchange=async function(){
   var notin=[];all.forEach(function(e){var hit=rows.some(function(r){return sgSameChem(r.it.name,e.name)});if(!hit&&notin.indexOf(e.name)<0)notin.push(e.name)});
   sgSave();sgRender();
   var warn=[];if(state.name&&cos.length&&cos.every(function(c){var a=c.replace(/股份|有限|公司/g,''),b=String(state.name).replace(/股份|有限|公司/g,'');return a.indexOf(b)<0&&b.indexOf(a)<0}))warn.push('報告公司名稱「'+cos.join('、')+'」與目前客戶不同，請確認');
-  $('#sgRep').innerHTML='已讀 '+files.length+' 份報告，共 '+dates.length+' 次監測（'+dates.join('、')+'），填入 '+matchedCnt+' 筆數據。'+
+  $('#sgRep').innerHTML='本次讀入 '+files.length+' 份報告、'+matchedCnt+' 筆數據；目前累計 '+dates.length+' 次監測（'+dates.join('、')+'）。可以再按一次匯入加入其他報告，會累加不會蓋掉。'+
     (notin.length?'<br>報告有、但系統這間沒有（沒有標準或不在採樣策略表）：'+esc(notin.join('、')):'')+
     (warn.length?'<br><span style="color:#B42318">'+esc(warn.join('；'))+'</span>':'')+
     (msgs.length?'<br><span style="color:#B5651D">'+msgs.map(esc).join('<br>')+'</span>':'')+'<br>請核對後按「套用到系統」。'};
@@ -1756,7 +1759,7 @@ $('#sgApply').onclick=function(){
 function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
 $('#sgExp').onclick=function(){
   var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
-  var nd=10,cells={},merges=[],FNROW=-1;
+  var nd=Math.max(15,Math.min(40,SG.dates.length+4)),cells={},merges=[],FNROW=-1;
   function put(r,c,v,st,f){cells[r+','+c]={v:v,s:st,f:f}}
   var cX=4+nd,cL=cX+1;
   ['SEG代號','化學品','容許濃度','單位'].forEach(function(t,i){put(0,i,t,1);put(1,i,'',1);merges.push(sgColL(i)+'1:'+sgColL(i)+'2')});
