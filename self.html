@@ -205,7 +205,8 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 <div class="modal" id="sgModal"><div class="box" style="max-width:1150px">
   <div class="row" style="justify-content:space-between"><b>統計表產生器</b><button class="btn sm del" id="sgClose">關閉</button></div>
   <div class="hint" style="margin:4px 0 6px">化學品直接帶入目前的 SEG（物理性、短時間採樣、沒有容許濃度標準的不列）。數值只打數字，報告上有「&lt;」的按旁邊 &lt; 鈕（細體）。同一次有兩個測點用 / 隔開（例 12.4/0.804），取較高值。6 次以上用第95百分位，未滿 6 次取最高值。日期只有匯出 Excel 時用到（民國 yymmdd）。</div>
-  <div class="row" style="margin-bottom:8px"><button class="btn sm" id="sgAddR">＋新增一次監測</button><button class="btn sm" id="sgDelR">－刪最後一次</button><button class="btn pri" id="sgApply">套用到系統</button><button class="btn" id="sgExp">匯出統計表 Excel</button><button class="btn sm del" id="sgClear">清空數值</button></div>
+  <div class="row" style="margin-bottom:8px"><button class="btn pri" id="sgImp">匯入歷年報告（Excel）</button><input type="file" id="sgFile" multiple accept=".xlsx,.xlsm" hidden><button class="btn sm" id="sgAddR">＋新增一次監測</button><button class="btn sm" id="sgDelR">－刪最後一次</button><button class="btn pri" id="sgApply">套用到系統</button><button class="btn" id="sgExp">匯出統計表 Excel</button><button class="btn sm del" id="sgClear">清空數值</button></div>
+  <div id="sgRep" class="hint" style="margin-bottom:6px"></div>
   <div id="sgEmpty" class="hint" style="display:none">目前沒有需要填統計表的化學品。</div>
   <div style="overflow-x:auto"><table class="sgtable" id="sgTb"></table></div>
 </div></div>
@@ -1686,6 +1687,84 @@ $('#sgModal').addEventListener('click',function(e){var t=e.target;
 $('#sgAddR').onclick=function(){if(SG.dates.length>=10){alert('最多 10 次');return}SG.dates.push('');Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.push('');SG.vals[k].nd.push(false)});sgSave();sgRender()};
 $('#sgDelR').onclick=function(){if(SG.dates.length<=1)return;var j=SG.dates.length-1;if(Object.keys(SG.vals).some(function(k){return SG.vals[k].v[j]})&&!confirm('最後一次已有數據，確定刪除？'))return;SG.dates.pop();Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.pop();SG.vals[k].nd.pop()});sgSave();sgRender()};
 $('#sgClear').onclick=function(){if(!confirm('清空所有已填的數值？'))return;SG={dates:['','','','','',''],vals:{}};sgSave();sgRender()};
+/* ---------- 統計表產生器：匯入歷年報告（Excel 報告書的「彙整表」工作表） ---------- */
+async function sgReadSummary(buf){
+  var ss=[];
+  try{var sx=await unzipEntry(buf,'xl/sharedStrings.xml');var sd=new DOMParser().parseFromString(sx,'application/xml');
+    Array.prototype.forEach.call(sd.getElementsByTagName('si'),function(si){var s='';Array.prototype.forEach.call(si.getElementsByTagName('t'),function(x){s+=x.textContent});ss.push(s)})}catch(e){}
+  var paths=[];
+  try{
+    var wx=await unzipEntry(buf,'xl/workbook.xml'),rx=await unzipEntry(buf,'xl/_rels/workbook.xml.rels');
+    var rmap={};Array.prototype.forEach.call(new DOMParser().parseFromString(rx,'application/xml').getElementsByTagName('Relationship'),function(r){rmap[r.getAttribute('Id')]=r.getAttribute('Target')});
+    Array.prototype.forEach.call(new DOMParser().parseFromString(wx,'application/xml').getElementsByTagName('sheet'),function(s){
+      var id=s.getAttribute('r:id')||s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');var tg=rmap[id]||'';
+      tg=tg.replace(/^\/?(xl\/)?/,'');paths.push({name:s.getAttribute('name')||'',path:'xl/'+tg})})
+  }catch(e){}
+  if(!paths.length)(await unzipList(buf)).filter(function(n){return /^xl\/worksheets\/sheet\d+\.xml$/.test(n)}).sort().forEach(function(n){paths.push({name:'',path:n})});
+  paths.sort(function(a,b){return(/彙整/.test(b.name)?1:0)-(/彙整/.test(a.name)?1:0)});
+  for(var q=0;q<paths.length;q++){
+    var xml;try{xml=await unzipEntry(buf,paths[q].path)}catch(e){continue}
+    var d=new DOMParser().parseFromString(xml,'application/xml'),g=[];
+    Array.prototype.forEach.call(d.getElementsByTagName('row'),function(rw){
+      Array.prototype.forEach.call(rw.getElementsByTagName('c'),function(c){
+        var ref=c.getAttribute('r')||'',m=ref.match(/^([A-Z]+)(\d+)$/);if(!m)return;
+        var col=0;for(var i=0;i<m[1].length;i++)col=col*26+(m[1].charCodeAt(i)-64);col--;var row=parseInt(m[2])-1;
+        var tp=c.getAttribute('t'),v=c.getElementsByTagName('v')[0],val='';
+        if(tp==='s'&&v)val=ss[parseInt(v.textContent)]||'';else if(tp==='inlineStr')val=(c.getElementsByTagName('t')[0]||{textContent:''}).textContent;else if(v)val=v.textContent;
+        while(g.length<=row)g.push([]);var r=g[row];while(r.length<=col)r.push('');r[col]=String(val).trim()})});
+    var hi=-1;for(var i=0;i<g.length&&i<60;i++){var j=(g[i]||[]).join('|');if(/監測項目/.test(j)&&/監測結果/.test(j)&&/監測日期/.test(j)){hi=i;break}}
+    if(hi<0)continue;
+    var hd=g[hi],ci=function(re){for(var k=0;k<hd.length;k++)if(re.test(hd[k]))return k;return -1};
+    var cItem=ci(/監測項目/),cPl=ci(/監測地點/),cDt=ci(/監測日期/),cRs=ci(/監測結果/);if(cItem<0||cDt<0||cRs<0)continue;
+    var co='';for(var t=0;t<hi;t++){var x=(g[t]||[]).filter(function(s){return s&&!/彙整表/.test(s)})[0];if(x){co=x;break}}
+    var out={co:co,ents:[]},last='';
+    for(var r=hi+1;r<g.length;r++){
+      var row=g[r]||[];if(/^\s*1\./.test(row[0]||''))break;
+      if(row[cItem])last=row[cItem];var dt=row[cDt]||'',rs=String(row[cRs]||'');
+      if(!last||!dt||rs==='')continue;
+      var unit=String(row[cRs+1]||'');if(/dBA|lux/i.test(unit)||/噪音|照度|照明|溫度|熱指數|局部排氣|二氧化碳|振動/.test(last))continue;
+      var n=parseFloat(rs.replace(/[<＜]/g,''));if(isNaN(n))continue;
+      var m2=dt.match(/(\d{2,3})\D+(\d{1,2})\D+(\d{1,2})/);if(!m2)continue;
+      var dstr=m2[1]+('0'+m2[2]).slice(-2)+('0'+m2[3]).slice(-2);
+      out.ents.push({name:last,place:row[cPl]||'',date:dstr,n:n,nd:/^[<＜]/.test(rs)})}
+    return out}
+  return null}
+function sgNm(s){return String(s||'').replace(/(乙二醇|丙二醇|二乙二醇|二丙二醇)單/,'$1')}
+function sgSameChem(a,b){a=sgNm(a);b=sgNm(b);if(statMatch(a,b))return true;var x=findChem(IDX,a),y=findChem(IDX,b);return!!(x&&y&&x===y)}
+function sgPlaceOK(gname,place){var p=String(place||'').replace(/[（(].*?[）)]/g,'').replace(/\d+[-－]\d+線|\d+線/g,'').trim(),g=String(gname||'').trim();return!!(p&&g&&(g.indexOf(p)>=0||p.indexOf(g)>=0))}
+$('#sgImp').onclick=function(){$('#sgFile').click()};
+$('#sgFile').onchange=async function(){
+  var files=Array.prototype.slice.call(this.files||[]);this.value='';if(!files.length)return;
+  var all=[],msgs=[],cos=[];
+  for(var i=0;i<files.length;i++){
+    try{var res=await sgReadSummary(await files[i].arrayBuffer());
+      if(!res||!res.ents.length){msgs.push(files[i].name+'：找不到「彙整表」或沒有化學性數據')}
+      else{all=all.concat(res.ents);if(res.co&&cos.indexOf(res.co)<0)cos.push(res.co)}}
+    catch(e){msgs.push(files[i].name+'：讀取失敗')}}
+  if(!all.length){$('#sgRep').innerHTML='<span style="color:#B42318">'+esc(msgs.join('；')||'沒有讀到資料')+'</span>';return}
+  var dates=[];all.forEach(function(e){if(dates.indexOf(e.date)<0)dates.push(e.date)});dates.sort();
+  if(dates.length>10){msgs.push('超過 10 次，只取最近 10 次');dates=dates.slice(-10)}
+  SG={dates:dates,vals:{}};
+  var rows=sgRows(),used=[],matchedCnt=0;
+  rows.forEach(function(r){r.d.v=dates.map(function(){return''});r.d.nd=dates.map(function(){return false})});
+  all.forEach(function(e,ei){
+    var j=dates.indexOf(e.date);if(j<0)return;
+    var cand=rows.filter(function(r){return sgSameChem(r.it.name,e.name)});
+    if(!cand.length)return;
+    var pm=cand.filter(function(r){return sgPlaceOK(r.g.name,e.place)});
+    var tg=pm.length?pm:(cand.length===1?cand:[]);
+    if(!tg.length){msgs.push(e.date+' '+e.name+'（'+e.place+'）：對不到 SEG，請手動填');return}
+    tg.forEach(function(r){var cur=sgParse(r.d.v[j],r.d.nd[j]);
+      if(!cur||e.n>cur.n||(e.n===cur.n&&cur.nd&&!e.nd)){r.d.v[j]=String(e.n);r.d.nd[j]=e.nd}
+      if(used.indexOf(ei)<0){used.push(ei);matchedCnt++}})});
+  var inPlan={};rows.forEach(function(r){inPlan[r.it.name]=1});
+  var notin=[];all.forEach(function(e){var hit=rows.some(function(r){return sgSameChem(r.it.name,e.name)});if(!hit&&notin.indexOf(e.name)<0)notin.push(e.name)});
+  sgSave();sgRender();
+  var warn=[];if(state.name&&cos.length&&cos.every(function(c){var a=c.replace(/股份|有限|公司/g,''),b=String(state.name).replace(/股份|有限|公司/g,'');return a.indexOf(b)<0&&b.indexOf(a)<0}))warn.push('報告公司名稱「'+cos.join('、')+'」與目前客戶不同，請確認');
+  $('#sgRep').innerHTML='已讀 '+files.length+' 份報告，共 '+dates.length+' 次監測（'+dates.join('、')+'），填入 '+matchedCnt+' 筆數據。'+
+    (notin.length?'<br>報告有、但系統這間沒有（沒有標準或不在採樣策略表）：'+esc(notin.join('、')):'')+
+    (warn.length?'<br><span style="color:#B42318">'+esc(warn.join('；'))+'</span>':'')+
+    (msgs.length?'<br><span style="color:#B5651D">'+msgs.map(esc).join('<br>')+'</span>':'')+'<br>請核對後按「套用到系統」。'};
 $('#sgApply').onclick=function(){
   var n=0,low=[];sgRows().forEach(function(r){var c=sgCalc(r);if(c.x==null)return;
     r.it.conc=sgFmt(c.x);r.it.src='x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.n<6)low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
