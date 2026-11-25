@@ -164,7 +164,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <div class="card">
     <div class="row" style="justify-content:space-between"><b>各廠資料夾</b><span class="hint">匯入計畫書後自動存入，點開看進度</span></div>
     <div class="row" style="margin-top:8px"><input id="farmQ" placeholder="搜尋客戶名稱" style="flex:1 1 160px"><button class="btn sm pri" id="farmBak">匯出（壓縮檔）</button><button class="btn sm" id="farmRes">匯入（壓縮檔／檔案）</button><input type="file" id="farmResFile" accept=".zip,.json" multiple hidden></div>
-    <div class="hint" style="margin-top:6px" id="farmStat">交接：A 按「匯出」得到壓縮檔 → B 按「匯入」選該壓縮檔（或解壓後的單廠 .json），就會帶入 A 的資料。勾選廠名左邊的方框可只匯出指定的廠。資料存在這台電腦的瀏覽器，清除瀏覽器資料會消失，請定期匯出。</div>
+    <div class="hint" style="margin-top:6px" id="farmStat">交接：A 按「匯出」得到壓縮檔（每間廠一個資料夾，內有：資料.json、報價數量表 Word、點數調整說明 Word）→ B 按「匯入」選該壓縮檔（或解壓後的單廠 .json），就會帶入 A 的資料。勾選廠名左邊的方框可只匯出指定的廠。資料存在這台電腦的瀏覽器，清除瀏覽器資料會消失，請定期匯出。</div>
   </div>
   <div id="farmList"></div>
 </section>
@@ -1526,7 +1526,7 @@ $('#farmList').addEventListener('click',function(e){
     document.querySelector('#tabs button[data-t=plan]').click()}
   else if(d.word){var r=f(d.word);if(!r)return;var R=computeX(r.state,SET,CH);dlWord(R,checkData(r.state,CH),r.state,r.id)}
   else if(d.quote){var r=f(d.quote);if(!r)return;var R=computeX(r.state,SET,CH);dlQuote(R,checkData(r.state,CH),r.state,parseInt(r.qf)||1,r.id)}
-  else if(d.exp){var r=f(d.exp);if(r)saveBlob(new Blob([JSON.stringify(farmFile(r))],{type:'application/json'}),fnSafe(r.name)+'_'+todayStr()+'.json')}
+  else if(d.exp){var r=f(d.exp);if(r){var k0=fnSafe(r.name);farmDocs(r,k0).then(function(dd){var fs=[{name:k0+'/資料.json',data:JSON.stringify(farmFile(r))}].concat(dd);saveBlob(zipStore(fs,'application/zip'),k0+'_'+todayStr()+'.zip')})}}
   else if(d.getf){var pr=d.getf.split('|'),r=f(pr[0]);if(!r)return;var x=(r.files||[]).find(function(y){return y.kind===pr[1]});if(x)saveBlob(b64Blob(x.b64),x.name)}
   else if(d.copy){var r=f(d.copy);if(r)copyText(r.say||'',t)}
   else if(d.del){var r=f(d.del);if(r)ask('刪除「'+r.name+'」的紀錄？（所有同事都會看不到，無法復原）',function(){farmDel(d.del);renderFarms()})}
@@ -1534,13 +1534,22 @@ $('#farmList').addEventListener('click',function(e){
 function todayStr(){var d=new Date();return d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)}
 function fnSafe(s){return(String(s||'').replace(/[\\/:*?"<>|]/g,'').trim()||'未命名廠').slice(0,60)}
 function farmFile(r){return{v:2,kind:'monitor-farm',state:r.state,farm:r}}
+async function farmDocs(r,k){
+  var out=[],cn=((fullName(r.state)||'客戶').replace(/[\\/:*?"<>|]/g,'')||'客戶');
+  try{var Rr=computeX(r.state,SET,CH),G=checkData(r.state,CH);
+    var b1=buildQuoteDocx(Rr,G,r.state,parseInt(r.qf)||1),b2=buildAdjDocx(Rr,G,r.state);
+    out.push({name:k+'/'+cn+'_報價數量表.docx',data:new Uint8Array(await b1.arrayBuffer())});
+    out.push({name:k+'/'+cn+'_作業環境監測點數調整說明.docx',data:new Uint8Array(await b2.arrayBuffer())})
+  }catch(x){}
+  return out}
 $('#farmBak').onclick=async function(){
   var all=farmsGet(),sel=all.filter(function(x){return selF[x.id]}),use=sel.length?sel:all;
   if(!use.length){alert('還沒有可匯出的廠');return}
   var d=new Date(),ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2),used={};
-  var files=[];use.forEach(function(r,i){var n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;
+  var files=[];
+  for(var i=0;i<use.length;i++){var r=use[i],n=fnSafe(r.name),k=n;if(used[k]){k=n+'_'+(i+1)}used[k]=1;
     files.push({name:k+'/資料.json',data:JSON.stringify(farmFile(r))});
-    (r.files||[]).forEach(function(x){var bin=atob(x.b64),u=new Uint8Array(bin.length);for(var j=0;j<bin.length;j++)u[j]=bin.charCodeAt(j);files.push({name:k+'/'+x.name,data:u})})});
+    var dd=await farmDocs(r,k);dd.forEach(function(x){files.push(x)})}
   saveBlob(zipStore(files,'application/zip'),(use.length===1?fnSafe(use[0].name):fnSafe(use[0].name)+'等'+use.length+'間')+'_'+ds+'.zip');
   toast('已匯出 '+use.length+' 間廠'+(sel.length?'（勾選的）':'（全部）'))};
 $('#farmRes').onclick=function(){$('#farmResFile').click()};
