@@ -278,6 +278,7 @@ function compute(cs, S, CH) {
       if (ch && ch.m === '依場所判斷') { mkKeep('依場所判斷，維持現況'); return; }
       var unit = it.unit || defaultUnit(ch);
       var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
+      if (isNaN(pel)) { mkKeep('無容許濃度標準，維持現況'); return; }
       var c = parseConc(it.conc);
       var src = it.src || 'x95';
       var ratio = (!isNaN(c.v) && !isNaN(pel) && pel > 0) ? c.v / pel : null;
@@ -387,7 +388,7 @@ function checkData(cs, CH) {
       if (it.cur === '' || it.cur === null || it.cur === undefined) I.t9.push(code + ' ' + nm + ' 現況採樣點數');
       var unit = it.unit || defaultUnit(ch);
       var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
-      if (isNaN(pel)) I.other.push(code + ' ' + nm + '：PEL');
+      if (isNaN(pel)) return;
       var c = parseConc(it.conc);
       if (isNaN(c.v)) miss.push(nm + '（無任何濃度資料）');
       else if ((it.src || 'x95') !== 'x95') miss.push(nm + '（目前暫用單次結果）');
