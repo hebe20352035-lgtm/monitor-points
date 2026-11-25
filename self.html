@@ -1663,9 +1663,9 @@ function sgCalc(r){
   return o}
 function sgRender(){
   var rows=sgRows();
-  var h='<tr><th>SEG</th><th>化學品</th><th>容許濃度</th>'+SG.dates.map(function(d,j){return'<th><input class="sgd" data-sd="'+j+'" value="'+esc(d)+'" placeholder="日期"></th>'}).join('')+'<th>第95百分位／最高值</th><th>取值方式</th><th>暴露等級</th></tr>';
+  var h='<tr><th>SEG</th><th>監測場所</th><th>化學品</th><th>容許濃度</th>'+SG.dates.map(function(d,j){return'<th><input class="sgd" data-sd="'+j+'" value="'+esc(d)+'" placeholder="日期"></th>'}).join('')+'<th>第95百分位／最高值</th><th>取值方式</th><th>暴露等級</th></tr>';
   rows.forEach(function(r,i){var c=sgCalc(r);
-    h+='<tr><td>'+esc(r.g.code)+'</td><td style="text-align:left">'+esc(r.it.name)+'</td><td>'+(isNaN(r.inf.pel)?'?':r.inf.pel)+' '+esc(r.inf.unit)+'</td>'+
+    h+='<tr><td>'+esc(r.g.code)+'</td><td style="text-align:left;min-width:90px">'+esc(r.g.name||'')+'</td><td style="text-align:left">'+esc(r.it.name)+'</td><td>'+(isNaN(r.inf.pel)?'?':r.inf.pel)+' '+esc(r.inf.unit)+'</td>'+
     SG.dates.map(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);return'<td style="white-space:nowrap"><input class="sgv '+(p&&!p.nd?'sgb':'sgt')+'" data-sk="'+esc(r.k)+'" data-sc="'+j+'" value="'+esc(r.d.v[j])+'"><button class="btn sm sglt'+(r.d.nd[j]?' on':'')+'" data-slt="'+esc(r.k)+'|'+j+'" title="報告上有「<」就按亮">&lt;</button></td>'}).join('')+
     '<td>'+(c.x==null?'—':'<b>'+sgFmt(c.x)+'</b>')+'</td><td class="hint">'+esc(c.method)+'</td><td class="'+(c.lv==='第三級'?'sg3':c.lv==='第二級'?'sg2':'sg1')+'">'+esc(c.lv||'')+'</td></tr>'});
   $('#sgTb').innerHTML=h;
