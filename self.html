@@ -1774,17 +1774,19 @@ $('#sgApply').onclick=function(){
 function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
 $('#sgExp').onclick=function(){
   var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
-  var nd=SG.dates.length,cells={},merges=[],FNROW=-1;
-  function put(r,c,v,st){cells[r+','+c]={v:v,s:st}}
+  var nd=10,cells={},merges=[],FNROW=-1;
+  function put(r,c,v,st,f){cells[r+','+c]={v:v,s:st,f:f}}
   var cX=4+nd,cL=cX+1;
   ['SEG代號','化學品','容許濃度','單位'].forEach(function(t,i){put(0,i,t,1);put(1,i,'',1);merges.push(sgColL(i)+'1:'+sgColL(i)+'2')});
   put(0,4,'歷年監測日期/數據結果',1);for(var j=1;j<nd;j++)put(0,4+j,'',1);if(nd>1)merges.push('E1:'+sgColL(3+nd)+'1');
-  SG.dates.forEach(function(d,j){var n=parseInt(d);put(1,4+j,isNaN(n)?d:n,1)});
+  for(var j=0;j<nd;j++){var d=SG.dates[j],n=parseInt(d);put(1,4+j,(d==null||d==='')?'':(isNaN(n)?d:n),1)}
   [[cX,'第95百分位1'],[cL,'暴露等級2']].forEach(function(a){put(0,a[0],a[1],1);put(1,a[0],'',1);merges.push(sgColL(a[0])+'1:'+sgColL(a[0])+'2')});
   rows.forEach(function(r,i){var c=sgCalc(r),rr=2+i;
     put(rr,0,r.g.code,2);put(rr,1,r.it.name,2);put(rr,2,isNaN(r.inf.pel)?'—':r.inf.pel,2);put(rr,3,r.inf.unit==='mg/m³'?'mg/m3':r.inf.unit,2);
-    SG.dates.forEach(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);put(rr,4+j,p?p.n:'',p?(p.nd?4:3):2)});
-    put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2);put(rr,cL,c.lv||'',2)});
+    for(var j=0;j<nd;j++){var p=j<SG.dates.length?sgParse(r.d.v[j],r.d.nd[j]):null;put(rr,4+j,p?p.n:'',p?(p.nd?4:3):2)}
+    var rg='E'+(rr+1)+':'+sgColL(3+nd)+(rr+1),xc=sgColL(cX)+(rr+1);
+    put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2,'IFERROR(_xlfn.PERCENTILE.INC('+rg+',0.95),0)');
+    put(rr,cL,c.lv||'',2,'IFERROR(IF('+xc+'>=C'+(rr+1)+',"第三級",IF('+xc+'>=C'+(rr+1)+'*0.5,"第二級","第一級")),"")')});
   var rr=2+rows.length;
   var FNT='1.95%的信賴區間推估出該相似暴露群之平均暴露濃度(使用MS-Excel之內建函數(PERCENTILE) 計算求得)\n2.暴露等級= X95<0.5PEL為第一級；0.5PEL≦ X95<PEL為第二級；X95≧PEL為第三級\n3.分級管理措施詳監測報告';
   put(rr,0,FNT,7);for(var c=1;c<=cL;c++)put(rr,c,'',7);merges.push('A'+(rr+1)+':'+sgColL(cL)+(rr+1));FNROW=rr;
@@ -1794,7 +1796,7 @@ $('#sgExp').onclick=function(){
   var maxR=0,maxC=0;Object.keys(cells).forEach(function(k){var a=k.split(',');maxR=Math.max(maxR,+a[0]);maxC=Math.max(maxC,+a[1])});
   var sd='';
   for(var r=0;r<=maxR;r++){var rx='';for(var c=0;c<=maxC;c++){var x=cells[r+','+c];if(!x)continue;var ref=sgColL(c)+(r+1);
-    if(typeof x.v==='number')rx+='<c r="'+ref+'" s="'+x.s+'"><v>'+x.v+'</v></c>';else rx+='<c r="'+ref+'" s="'+x.s+'" t="inlineStr"><is><t xml:space="preserve">'+xe(x.v)+'</t></is></c>'}
+    if(x.f){rx+=(typeof x.v==='number')?'<c r="'+ref+'" s="'+x.s+'"><f>'+xe(x.f)+'</f><v>'+x.v+'</v></c>':'<c r="'+ref+'" s="'+x.s+'" t="str"><f>'+xe(x.f)+'</f><v>'+xe(x.v)+'</v></c>'}else if(typeof x.v==='number')rx+='<c r="'+ref+'" s="'+x.s+'"><v>'+x.v+'</v></c>';else rx+='<c r="'+ref+'" s="'+x.s+'" t="inlineStr"><is><t xml:space="preserve">'+xe(x.v)+'</t></is></c>'}
     if(rx)sd+='<row r="'+(r+1)+'"'+(r===FNROW?' ht="64" customHeight="1"':'')+'>'+rx+'</row>'}
   var cols='<cols><col min="1" max="1" width="11" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="4" width="9" customWidth="1"/><col min="5" max="'+(4+nd)+'" width="11" customWidth="1"/><col min="'+(cX+1)+'" max="'+(cX+1)+'" width="14" customWidth="1"/><col min="'+(cL+1)+'" max="'+(cL+1)+'" width="14" customWidth="1"/></cols>';
   var sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+cols+'<sheetData>'+sd+'</sheetData><mergeCells count="'+merges.length+'">'+merges.map(function(m){return'<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells></worksheet>';
