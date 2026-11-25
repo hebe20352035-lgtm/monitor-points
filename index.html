@@ -96,6 +96,7 @@ tr.k-gray td,tr.k-green td,tr.k-red td{color:#fff}
 tr.k-gray .na{font-size:12px;color:#fff}tr.k-red .st,tr.k-green .st,tr.k-gray .st{font-weight:600}
 tr.k-gray .pct,tr.k-green .pct,tr.k-red .pct{color:#fff}
 tr.k-gray .fn,tr.k-red .fn,tr.k-green .fn{color:#fff}
+.mt{display:block;font-size:11px;color:var(--ink3);margin-top:2px}tr.k-gray .mt,tr.k-red .mt,tr.k-green .mt{color:#fff}.mtsel{margin-top:3px;font-size:12px;max-width:100%}.fnb{border:1px solid #fff;background:transparent;color:#fff;border-radius:6px;font-size:11px;padding:1px 8px;margin-left:6px;cursor:pointer}
 tr.k-gray input,tr.k-gray select,tr.k-green input,tr.k-green select,tr.k-red input,tr.k-red select{color:#1E2A22}
 tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)}
 </style>
@@ -186,7 +187,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 
 <div class="modal" id="sgModal"><div class="box" style="max-width:1150px">
   <div class="row" style="justify-content:space-between"><b>統計表產生器</b><button class="btn sm del" id="sgClose">關閉</button></div>
-  <div class="hint" style="margin:4px 0 6px">化學品直接帶入目前的 SEG（物理性、短時間採樣、沒有容許濃度標準的不列）。數值只打數字，報告上有「&lt;」的按旁邊 &lt; 鈕（細體）。同一次有兩個測點用 / 隔開（例 12.4/0.804），取較高值。6 次以上用第95百分位，未滿 6 次取最高值。日期只有匯出 Excel 時用到（民國 yymmdd）。</div>
+  <div class="hint" style="margin:4px 0 6px">化學品直接帶入目前的 SEG（物理性、新增化學品、沒有容許濃度標準的不列）。數值只打數字，報告上有「&lt;」的按旁邊 &lt; 鈕（細體）。同一次有兩個測點用 / 隔開（例 12.4/0.804），取較高值。6 次以上用第95百分位，未滿 6 次取最高值。日期只有匯出 Excel 時用到（民國 yymmdd）。</div>
   <div class="row" style="margin-bottom:8px"><button class="btn pri" id="sgImp">匯入歷年報告（Excel）</button><input type="file" id="sgFile" multiple accept=".xlsx,.xlsm" hidden><button class="btn sm" id="sgAddR">＋新增一次監測</button><button class="btn sm" id="sgDelR">－刪最後一次</button><button class="btn pri" id="sgApply">套用到系統</button><button class="btn" id="sgExp">匯出統計表 Excel</button><button class="btn sm del" id="sgClear">清空數值</button></div>
   <div id="sgRep" class="hint" style="margin-bottom:6px"></div>
   <div id="sgEmpty" class="hint" style="display:none">目前沒有需要填統計表的化學品。</div>
@@ -281,7 +282,6 @@ function compute(cs, S, CH) {
       if (!it.name || !String(it.name).trim()) return;
       var name = String(it.name).trim();
       function mkKeep(why) { var c0 = parseFloat(it.cur) || 0; keep.push({ seg: g.code || '', segName: g.name || '', people: parseFloat(g.people) || 0, item: name, cur: c0, n: c0, freq: 6, keep: true, why: why, method: it.method || '' }); }
-      if (/短時間/.test(it.method || '')) { mkKeep('STEL 短時間採樣，不列入新制，照原樣點數'); return; }
       if (PHYS.test(name)) { phys.push(g.code + ' ' + name); mkKeep('物理性，維持現況'); return; }
       var ch = findChem(idx, name);
       var lg = legalOf(ch);
@@ -298,7 +298,7 @@ function compute(cs, S, CH) {
         seg: g.code || '', segName: g.name || '', group: String(g.group || g.name || g.code || '').trim(),
         grp: String(it.grp || '').trim(), pgrp: String(g.group || '').trim(),
         people: people, item: name, ch: ch, legal: lg, unit: unit, pel: pel, conc: it.conc, nd: c.nd,
-        ratio: ratio, tier: tierOf(ratio), src: src, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false, method: it.method || '', mode: ''
+        ratio: ratio, tier: tierOf(ratio), src: src, isNew: !!it.isNew, cur: parseFloat(it.cur) || 0, notes: [], freq: 6, n: 0, skip: false, method: it.method || '', mode: ''
       };
       if (lg === 'unknown') r.notes.push('資料庫查無，請確認名稱');
       if (lg === 'check') r.notes.push('是否法定待確認');
@@ -314,8 +314,14 @@ function compute(cs, S, CH) {
     if (p.note) r.notes.push(p.note);
   }
 
+  rows.forEach(function (r) {
+    if (!r.isNew) return;
+    r.ratio = null; r.conc = ''; r.nd = false; r.tier = { key: 'new', label: '新增化學品（初始採樣）' };
+    r.mode = 'newchem'; setN(r, 6, 6); r.notes.push('新增化學品，免填濃度，初始採樣每 6 個月測滿 6 個樣本');
+  });
+  var rest = rows.filter(function (r) { return !r.isNew; });
   if (big) {
-    rows.forEach(function (r) {
+    rest.forEach(function (r) {
       var t = r.tier.key; r.mode = r.ratio === null ? 'nodata' : 'tier';
       if (t === 'pel') setN(r, 3, 6);
       else if (t === 'half') setN(r, 6, 6);
@@ -326,7 +332,7 @@ function compute(cs, S, CH) {
   } else {
     var groups = {};
     var uid = 0;
-    rows.forEach(function (r) { var k = r.item; (groups[k] = groups[k] || []).push(r); });
+    rest.forEach(function (r) { var k = r.item; (groups[k] = groups[k] || []).push(r); });
     Object.keys(groups).forEach(function (k) {
       var ms = groups[k];
       var allLow = ms.every(function (r) { return r.ratio !== null && r.ratio < 0.5; });
@@ -391,15 +397,17 @@ function checkData(cs, CH) {
     named.forEach(function (it) {
       var nm = String(it.name).trim();
       var ch = findChem(idx, nm);
+      if (/噪音/.test(nm) && !/區域|個人|劑量/.test(String(it.method || '') + nm)) I.other.push(code + ' 噪音：請選區域或個人（劑量）');
       if (PHYS.test(nm) || (ch && (ch.m === '否' || ch.m === '依場所判斷'))) {
         if (it.cur === '' || it.cur === null || it.cur === undefined) I.t9.push(code + ' ' + nm + ' 現況採樣點數（維持現況項目）');
         return;
       }
       if (!ch) I.other.push(code + ' ' + nm + '：化學品清單查無此名稱');
-      if (it.cur === '' || it.cur === null || it.cur === undefined) I.t9.push(code + ' ' + nm + ' 現況採樣點數');
+      if (!it.isNew && (it.cur === '' || it.cur === null || it.cur === undefined)) I.t9.push(code + ' ' + nm + ' 現況採樣點數');
       var unit = it.unit || defaultUnit(ch);
       var pel = (it.pel !== '' && it.pel !== undefined && it.pel !== null && !isNaN(parseFloat(it.pel))) ? parseFloat(it.pel) : autoPel(ch, unit);
       if (isNaN(pel)) return;
+      if (it.isNew) return;
       var c = parseConc(it.conc);
       if (isNaN(c.v)) miss.push(nm + '（無任何濃度資料）');
       else if ((it.src || 'x95') !== 'x95') miss.push(nm + '（目前暫用單次結果）');
@@ -482,19 +490,22 @@ function itemStatus(it){
 }
 function rowKind(it){
   if(!it.name)return'';
-  if(PHYS.test(it.name)||/短時間/.test(it.method||''))return'k-gray';
+  if(PHYS.test(it.name))return'k-gray';
   var inf=itemInfo(it);var lg=legalOf(inf.ch);
   if(lg==='no'||(inf.ch&&inf.ch.m==='依場所判斷'))return'k-gray';
+  if(it.isNew)return lg==='unknown'?'k-red':'k-green';
   var ok=String(it.cur).trim()!==''&&inf.ratio!==null&&!it.flag&&!it.sflag&&lg!=='unknown';
   return ok?'k-green':'k-red';
 }
 function itemRow(g,it,gi,ii){
   var inf=itemInfo(it);var ph=isNaN(inf.pel)?'':inf.pel;
-  var kd=rowKind(it);var gray=(kd==='k-gray');
+  var kd=rowKind(it);var gray=(kd==='k-gray');var nw=!gray&&!!it.isNew;
+  var isNoise=/噪音/.test(it.name||'');var mt=String(it.method||'');
+  var mtHtml=isNoise?'<select data-f="method" class="mtsel"><option value="">請選：區域或個人（劑量）</option><option value="區域採樣"'+(/區域/.test(mt)?' selected':'')+'>區域採樣（區域噪音）</option><option value="個人採樣"'+(mt&&!/區域/.test(mt)?' selected':'')+'>個人採樣（劑量噪音）</option></select>':(mt?'<span class="mt">'+esc(mt)+'</span>':'');
   return'<tr data-i="'+ii+'" class="'+kd+'">'+
-  '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+'</td>'+
+  '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+mtHtml+'</td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
-  (gray?'<td class="na" colspan="2">'+(/短時間/.test(it.method||'')?'STEL 短時間採樣不列入新制法規，照原樣點數採樣':'不需填濃度，維持現況點數')+'</td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字">'+(it.sflag?'<span class="fn">統計表寫在 '+esc(it.sflag.from)+'<button data-act="okS">確認無誤</button></span>':'')+'</td>'+
+  (gray?'<td class="na" colspan="2">不需填濃度，維持現況點數</td>':nw?'<td class="na" colspan="2">新增化學品：免填濃度，初始採樣每 6 個月測滿 6 個樣本 <button data-act="oldChem" class="fnb">改填濃度</button></td>':'<td><input data-f="conc" inputmode="decimal" value="'+esc(it.conc)+'" placeholder="填數字">'+(it.sflag?'<span class="fn">統計表寫在 '+esc(it.sflag.from)+'<button data-act="okS">確認無誤</button></span>':'')+'</td>'+
   '<td><select data-f="src"><option value="x95"'+((it.src||'x95')==='x95'?' selected':'')+'>統計表 X95</option><option value="single"'+(it.src==='single'?' selected':'')+'>單次結果</option></select></td>')+
   '<td class="adv-col"><select data-f="unit"><option value="">自動('+inf.unit+')</option><option value="ppm"'+(it.unit==='ppm'?' selected':'')+'>ppm</option><option value="mg/m³"'+(it.unit==='mg/m³'?' selected':'')+'>mg/m³</option></select></td>'+
   '<td class="adv-col"><input data-f="pel" value="'+esc(it.pel)+'" placeholder="'+esc(ph)+'"></td>'+
@@ -508,6 +519,7 @@ $('#segs').addEventListener('input',function(e){
   if(tr){var it=g.items[+tr.dataset.i];it[f]=t.value;
     if(it.sflag&&(f==='conc'||f==='name'))delete it.sflag;
     if(it.flag&&it.flag===f){delete it.flag;t.classList.remove('bad');var fn0=t.parentNode.querySelector('.fn');if(fn0)fn0.remove()}
+    if(f==='method'&&it.isNew===undefined&&false){}
     var oldK=tr.className;var newK=rowKind(it);
     if((oldK==='k-gray')!==(newK==='k-gray')&&(f==='name')){save();update(false);renderSegs();return}
     tr.className=newK;
@@ -524,7 +536,8 @@ $('#segs').addEventListener('click',function(e){
   if(b.dataset.act==='okS'){var si=+b.closest('tr').dataset.i;delete g.items[si].sflag;renderSegs();save();update(true);return}
   if(b.dataset.act==='okFlag'){delete g.flag[b.dataset.k];renderSegs();save();update(true);return}
   if(b.dataset.act==='delSeg'){ask('刪除 '+g.code+'？',function(){state.segs.splice(+gEl.dataset.g,1);renderSegs()})}
-  else if(b.dataset.act==='addItem'){g.items.push(newItem());renderSegs()}
+  else if(b.dataset.act==='addItem'){var ni=newItem();ni.isNew=true;g.items.push(ni);renderSegs()}
+  else if(b.dataset.act==='oldChem'){var oi=+b.closest('tr').dataset.i;delete g.items[oi].isNew;renderSegs()}
   else if(b.dataset.act==='delItem'){var i=+b.closest('tr').dataset.i;g.items.splice(i,1);if(!g.items.length)g.items.push(newItem());renderSegs()}
   save();update(true);
 });
@@ -574,7 +587,7 @@ function computeX(st,SET,CH){return applyQov(compute(st,SET,CH),st)}
 function finRows(R){
   var list=[];
   R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:r.item,qk:r.qk,n:r.n,freq:r.freq,note:[(r.freq===3?'每3個月':''),(r.src!=='x95'&&r.ratio!==null?'暫用單次結果':''),(r.qadj?'報價數量已調整':''),(r.remark||'')].filter(Boolean).join('；')})});
-  R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:k.item,qk:k.qk,method:k.method,n:k.n,freq:k.freq,note:k.why+(k.qadj?'；報價數量已調整':'')})});
+  R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:(k.item==='噪音'&&/^(區域|劑量)噪音$/.test(k.qk||''))?k.qk:k.item,qk:k.qk,method:k.method,n:k.n,freq:k.freq,note:k.why+(k.qadj?'；報價數量已調整':'')})});
   list.sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
   return list;
 }
@@ -622,12 +635,12 @@ function update(regen){
   rows.forEach(function(r){
     var dd=r.n-r.cur;var dc=r.skip?'':(dd>0?'up':(dd<0?'down':''));
     h2+='<tr'+(r.skip?' class="skip"':'')+'><td>'+esc(r.item)+'</td><td>'+esc(r.seg)+(r.segName?'<br><span class="hint">'+esc(r.segName)+'</span>':'')+'</td><td class="num">'+(r.people||'')+'</td>'+
-    '<td>'+esc((r.nd?'<':'')+(r.conc===undefined?'':String(r.conc).replace(/^[<＜]/,''))+' '+r.unit)+'<br><span class="hint">'+fmtPct(r.ratio)+'・'+(r.src==='x95'?'X95':'單次')+'</span></td>'+
+    (r.isNew?'<td>免填濃度<br><span class="hint">新增化學品</span></td>':'<td>'+esc((r.nd?'<':'')+(r.conc===undefined?'':String(r.conc).replace(/^[<＜]/,''))+' '+r.unit)+'<br><span class="hint">'+fmtPct(r.ratio)+'・'+(r.src==='x95'?'X95':'單次')+'</span></td>')+
     '<td>'+esc(r.tier.label)+'</td><td>每 '+r.freq+' 個月</td><td class="num">'+r.cur+'</td><td class="num"><b>'+r.n+'</b></td><td class="num '+dc+'">'+(dd>0?'+':'')+dd+'</td><td>'+esc(r.notes.join('；'))+'</td></tr>';
   });
   h2+='</tbody>';$('#resTbl').innerHTML=rows.length?h2:'';
   var w=[];if(S.anyQuarterly)w.push('有項目達或超過 PEL，頻率改為每 3 個月。');
-  if(R.rows.some(function(r){return r.ratio===null}))w.push('部分項目缺濃度或 PEL，暫以 6 個樣本計。');
+  if(R.rows.some(function(r){return r.ratio===null&&!r.isNew}))w.push('部分項目缺濃度或 PEL，暫以 6 個樣本計。');
   $('#warnLine').textContent=w.join(' ');
   var ex=[];if(S.nonLegal.length)ex.push('維持現況（非法定）：'+S.nonLegal.map(function(x){return x}).join('、'));
   if(S.phys.length)ex.push('維持現況（物理性）：'+S.phys.join('、'));
@@ -749,7 +762,8 @@ function adjReason(r,S){
   var personal=/區域/.test(r.method||'')?' 公告要求採樣結果須能代表族群之個人暴露，116 年起本項目需改為個人採樣。':'';
   var m=r.mode,fq,txt;
   var lt=S.big?'貴公司勞工人數 100 人以上。':'貴公司勞工人數未達 100 人。';
-  if(m==='nodata'){fq='初始採樣';txt='本項目尚無可用的歷年監測數據。依公告，每一相似暴露族群之每一監測項目須先完成初始採樣，至少 6 個樣本，之後再依結果決定定期監測頻率。'+(pp?' '+pp:'')}
+  if(m==='newchem'){fq='初始採樣（每 6 個月）';txt='本項目為新增監測化學品，尚無歷年監測數據，免填濃度。依公告，每一相似暴露族群之每一監測項目須先完成初始採樣，每 6 個月至少測滿 6 個樣本，之後再依結果決定定期監測頻率。'+(pp?' '+pp:'')}
+  else if(m==='nodata'){fq='初始採樣';txt='本項目尚無可用的歷年監測數據。依公告，每一相似暴露族群之每一監測項目須先完成初始採樣，至少 6 個樣本，之後再依結果決定定期監測頻率。'+(pp?' '+pp:'')}
   else if(m==='skip'){fq='免測（附表之註）';txt=judge+lt+'且本項目各族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群（'+r.rep+'，'+fmtPct(r.repRatio)+'），本族群本次免測。'}
   else if(m==='best'){fq='每 6 個月';txt=judge+lt+'且本項目各相似暴露族群濃度均低於容許標準的 1/2，依附表之註只需監測濃度最高的族群；本族群為最高者，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
   else if(m==='low1'){fq='每 6 個月';txt=judge+lt+'本項目濃度低於容許標準的 1/2，每 6 個月監測一次，每次 6 個樣本。'+(pp?' '+pp:'')}
@@ -770,6 +784,7 @@ function buildAdjDocx(R,G,st){st=st||state;
   var rows=R.rows.slice().sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
   var pending=rows.filter(function(r){return r.mode==='pending'});
   var nNo=rows.filter(function(r){return r.mode==='nodata'}).length;
+  var newChems=uqA(rows.filter(function(r){return r.mode==='newchem'}).map(function(r){return r.item}));
   var skipItems=[];rows.forEach(function(r){if(r.mode==='skip'&&skipItems.indexOf(r.item)<0)skipItems.push(r.item)});
   var nPro=rows.filter(function(r){return !r.skip&&/未達3人|3～9人/.test((r.notes||[]).join('|'))}).length;
   var nPers=rows.filter(function(r){return !r.skip&&/區域/.test(r.method||'')}).length;
@@ -793,6 +808,7 @@ function buildAdjDocx(R,G,st){st=st||state;
   B.push(wPara('貴公司勞工人數 '+(st.total||'—')+' 人，適用公告附表「'+(S.big?'100 人以上':'未達 100 人')+'」之規定。本次以歷年監測數據之第95百分位值（簡易暴露濃度），與容許暴露標準比較判定級距。下次監測點數由 '+S.cur+' 點調整為 '+S.final+' 點'+'。'));
   var bl=[];
   if(nNo)bl.push(nNo+' 個項目尚無數據，需先完成初始採樣（每項目 6 個樣本）');
+  if(newChems.length)bl.push(newChems.join('、')+'為新增監測化學品，免填濃度，初始採樣每 6 個月測滿 6 個樣本');
   if(skipItems.length)bl.push(skipItems.length+' 個項目（'+skipItems.join('、')+'）依附表之註只測濃度最高族群，其餘族群本次免測');
   if(nPel)bl.push(nPel+' 個項目濃度達容許標準以上，監測頻率縮短為每 3 個月');
   if(nPro)bl.push('族群人數未達 10 人者，依公告但書調整樣本數');
@@ -1631,7 +1647,7 @@ function sgSave(){try{localStorage.setItem(SGK,JSON.stringify(SG))}catch(e){}}
 function sgRows(){
   var out=[],cnt={};
   state.segs.forEach(function(g){(g.items||[]).forEach(function(it){
-    if(!it.name||rowKind(it)==='k-gray')return;
+    if(!it.name||it.isNew||rowKind(it)==='k-gray')return;
     var inf=itemInfo(it);if(inf.ch&&isNaN(inf.pel))return;
     var k0=String(g.code).toUpperCase()+'|'+it.name;cnt[k0]=(cnt[k0]||0)+1;var k=k0+'|'+cnt[k0];
     var v=SG.vals[k];if(!v){v=SG.vals[k]={v:[],nd:[]}}
