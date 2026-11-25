@@ -164,6 +164,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
   <div class="card">
     <div class="row" style="justify-content:space-between"><b>各廠資料夾</b><span class="hint">匯入計畫書後自動存入，點開看進度</span></div>
     <div class="row" style="margin-top:8px"><input id="farmQ" placeholder="搜尋客戶名稱" style="flex:1 1 160px"><button class="btn sm pri" id="farmBak">匯出（壓縮檔）</button><button class="btn sm" id="farmRes">匯入（壓縮檔／檔案）</button><input type="file" id="farmResFile" accept=".zip,.json" multiple hidden></div>
+    <div class="row" style="margin-top:6px"><button class="btn sm" id="farmAll">全選／取消全選</button><button class="btn sm" id="farmDelSel" style="color:#b3261e;border-color:#e3b5b1">刪除勾選的廠</button></div>
     <div class="hint" style="margin-top:6px" id="farmStat">交接：A 按「匯出」得到壓縮檔（每間廠一個資料夾，內有：資料.json、報價數量表 Word、點數調整說明 Word）→ B 按「匯入」選該壓縮檔（或解壓後的單廠 .json），就會帶入 A 的資料。勾選廠名左邊的方框可只匯出指定的廠。資料存在這台電腦的瀏覽器，清除瀏覽器資料會消失，請定期匯出。</div>
   </div>
   <div id="farmList"></div>
@@ -1553,6 +1554,10 @@ $('#farmBak').onclick=async function(){
   saveBlob(zipStore(files,'application/zip'),(use.length===1?fnSafe(use[0].name):fnSafe(use[0].name)+'等'+use.length+'間')+'_'+ds+'.zip');
   toast('已匯出 '+use.length+' 間廠'+(sel.length?'（勾選的）':'（全部）'))};
 $('#farmRes').onclick=function(){$('#farmResFile').click()};
+$('#farmAll').onclick=function(){var a=farmsGet(),q=($('#farmQ').value||'').trim();if(q)a=a.filter(function(f){return f.name.indexOf(q)>=0});var allOn=a.length&&a.every(function(f){return selF[f.id]});a.forEach(function(f){selF[f.id]=!allOn});renderFarms()};
+$('#farmDelSel').onclick=function(){var a=farmsGet().filter(function(f){return selF[f.id]});
+  if(!a.length){alert('請先勾選要刪除的廠（廠名左邊的方框）');return}
+  ask('刪除勾選的 '+a.length+' 間廠？\n'+a.slice(0,8).map(function(f){return '・'+f.name}).join('\n')+(a.length>8?'\n…等':'')+'\n\n刪除後無法復原，需要的話請先按「匯出（壓縮檔）」備份。',function(){a.forEach(function(f){farmDel(f.id);delete selF[f.id]});renderFarms();toast('已刪除 '+a.length+' 間廠')})};
 $('#farmResFile').onchange=async function(){
   var fl=Array.prototype.slice.call(this.files||[]);this.value='';if(!fl.length)return;
   var recs=[],bad=0;
