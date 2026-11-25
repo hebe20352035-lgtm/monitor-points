@@ -71,6 +71,8 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
 .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 12px;cursor:pointer;font-size:13px}
 .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.sgtable{border-collapse:collapse;min-width:100%}.sgtable th,.sgtable td{border:1px solid var(--line);padding:3px 4px;text-align:center;font-size:14px;vertical-align:middle}.sgtable th{background:var(--soft);white-space:nowrap}
+.sgv{width:62px;text-align:center}.sgd{width:76px;text-align:center}.sgb{font-weight:700}.sgv.sgt{font-weight:400}.sglt{padding:2px 6px;margin-left:2px;color:var(--ink3)}.sglt.on{background:var(--accent);color:#fff;border-color:var(--accent)}.sg1{color:#1b7a46}.sg2{color:var(--warm);font-weight:600}.sg3{color:var(--bad);font-weight:700}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:none;align-items:center;justify-content:center;padding:14px}
 .modal.show{display:flex}
 .modal .box{background:#fff;border-radius:12px;padding:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
@@ -122,6 +124,7 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
       <button class="btn sm" id="addSeg">＋ SEG</button>
       <button class="btn sm" id="openImp">貼上匯入</button>
       <button class="btn sm" id="openConc">貼上濃度</button>
+      <button class="btn sm pri" id="openSg">統計表產生器</button>
       <button class="btn sm" id="openStat">匯入統計表</button><input type="file" id="statFile" accept=".xlsx,.docx,.csv,.txt" hidden>
       <details class="more"><summary class="btn sm">更多 ▾</summary><div class="morebox">
         <button class="btn sm" id="exp">匯出檔案</button>
@@ -199,6 +202,13 @@ tr.segsep td{background:#F3F6F4;font-weight:600;font-size:13px;color:var(--ink2)
 </section>
 </main>
 
+<div class="modal" id="sgModal"><div class="box" style="max-width:1150px">
+  <div class="row" style="justify-content:space-between"><b>統計表產生器</b><button class="btn sm del" id="sgClose">關閉</button></div>
+  <div class="hint" style="margin:4px 0 6px">化學品直接帶入目前的 SEG（物理性、短時間採樣、沒有容許濃度標準的不列）。數值只打數字，報告上有「&lt;」的按旁邊 &lt; 鈕（細體）。同一次有兩個測點用 / 隔開（例 12.4/0.804），取較高值。6 次以上用第95百分位，未滿 6 次取最高值。日期只有匯出 Excel 時用到（民國 yymmdd）。</div>
+  <div class="row" style="margin-bottom:8px"><button class="btn sm" id="sgAddR">＋新增一次監測</button><button class="btn sm" id="sgDelR">－刪最後一次</button><button class="btn pri" id="sgApply">套用到系統</button><button class="btn" id="sgExp">匯出統計表 Excel</button><button class="btn sm del" id="sgClear">清空數值</button></div>
+  <div id="sgEmpty" class="hint" style="display:none">目前沒有需要填統計表的化學品。</div>
+  <div style="overflow-x:auto"><table class="sgtable" id="sgTb"></table></div>
+</div></div>
 <div class="modal" id="concModal"><div class="box">
   <b>貼上上一次濃度（單次結果）</b>
   <div class="hint" style="margin:4px 0 6px">每行一筆：化學品, 場所, 濃度, 單位。系統依化學品加場所自動對到 SEG。已有統計表 X95 的項目不會被覆蓋。</div>
@@ -1626,6 +1636,99 @@ if(MODE==='self'){
     syncTop();renderSegs();save();update(true)};
 }
 
+/* ---------- 統計表產生器（直接用目前 SEG／化學品，填歷次數值 → 算 X95／最高值 → 套用或匯出 Excel） ---------- */
+var SGK='sg_draft_v1',SG={dates:['','','','','',''],vals:{}};
+try{var _so=JSON.parse(localStorage.getItem(SGK)||'null');if(_so&&_so.dates&&_so.vals)SG=_so}catch(e){}
+function sgSave(){try{localStorage.setItem(SGK,JSON.stringify(SG))}catch(e){}}
+function sgRows(){
+  var out=[],cnt={};
+  state.segs.forEach(function(g){(g.items||[]).forEach(function(it){
+    if(!it.name||rowKind(it)==='k-gray')return;
+    var inf=itemInfo(it);if(inf.ch&&isNaN(inf.pel))return;
+    var k0=String(g.code).toUpperCase()+'|'+it.name;cnt[k0]=(cnt[k0]||0)+1;var k=k0+'|'+cnt[k0];
+    var v=SG.vals[k];if(!v){v=SG.vals[k]={v:[],nd:[]}}
+    while(v.v.length<SG.dates.length){v.v.push('');v.nd.push(false)}
+    out.push({k:k,g:g,it:it,inf:inf,d:v})})});
+  return out}
+function sgParse(t,nd){var best=null;String(t||'').split(/[\/、,，;；\s]+/).forEach(function(s){if(!s)return;var n=parseFloat(s.replace(/[<＜]/g,''));if(isNaN(n))return;if(!best||n>best.n)best={n:n,nd:!!nd}});return best}
+function sgPct(a,p){var s=a.slice().sort(function(x,y){return x-y}),k=(s.length-1)*p,f=Math.floor(k),c=Math.min(f+1,s.length-1);return s[f]+(s[c]-s[f])*(k-f)}
+function sgFmt(x){return String(parseFloat(Number(x).toPrecision(5)))}
+function sgCalc(r){
+  var vs=[];SG.dates.forEach(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);if(p)vs.push(p)});
+  var o={n:vs.length,pel:r.inf.pel};
+  if(!vs.length){o.method='待填';return o}
+  var nums=vs.map(function(p){return p.n});
+  if(vs.length>=6){o.x=sgPct(nums.slice(-10),0.95);o.method='第95百分位'}else{o.x=Math.max.apply(null,nums);o.method='取最高值（'+vs.length+'次）'}
+  o.lv=isNaN(o.pel)?'待確認':(o.x>=o.pel?'第三級':(o.x>=o.pel*0.5?'第二級':'第一級'));
+  return o}
+function sgRender(){
+  var rows=sgRows();
+  var h='<tr><th>SEG</th><th>化學品</th><th>容許濃度</th>'+SG.dates.map(function(d,j){return'<th><input class="sgd" data-sd="'+j+'" value="'+esc(d)+'" placeholder="日期"></th>'}).join('')+'<th>第95百分位／最高值</th><th>取值方式</th><th>暴露等級</th></tr>';
+  rows.forEach(function(r,i){var c=sgCalc(r);
+    h+='<tr><td>'+esc(r.g.code)+'</td><td style="text-align:left">'+esc(r.it.name)+'</td><td>'+(isNaN(r.inf.pel)?'?':r.inf.pel)+' '+esc(r.inf.unit)+'</td>'+
+    SG.dates.map(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);return'<td style="white-space:nowrap"><input class="sgv '+(p&&!p.nd?'sgb':'sgt')+'" data-sk="'+esc(r.k)+'" data-sc="'+j+'" value="'+esc(r.d.v[j])+'"><button class="btn sm sglt'+(r.d.nd[j]?' on':'')+'" data-slt="'+esc(r.k)+'|'+j+'" title="報告上有「<」就按亮">&lt;</button></td>'}).join('')+
+    '<td>'+(c.x==null?'—':'<b>'+sgFmt(c.x)+'</b>')+'</td><td class="hint">'+esc(c.method)+'</td><td class="'+(c.lv==='第三級'?'sg3':c.lv==='第二級'?'sg2':'sg1')+'">'+esc(c.lv||'')+'</td></tr>'});
+  $('#sgTb').innerHTML=h;
+  $('#sgEmpty').style.display=rows.length?'none':'block'}
+function sgOpen(){if(!state.segs.length){alert('請先匯入計畫書');return}$('#sgModal').classList.add('show');sgRender()}
+$('#openSg').onclick=sgOpen;
+$('#sgClose').onclick=function(){$('#sgModal').classList.remove('show')};
+$('#sgModal').addEventListener('change',function(e){var t=e.target;
+  if(t.dataset.sd!=null){SG.dates[+t.dataset.sd]=t.value.trim();sgSave();return}
+  if(t.dataset.sk){var d=SG.vals[t.dataset.sk],j=+t.dataset.sc,raw=t.value.trim();if(/[<＜]/.test(raw))d.nd[j]=true;d.v[j]=raw.replace(/[<＜]/g,'');sgSave();setTimeout(sgRender,0)}});
+$('#sgModal').addEventListener('click',function(e){var t=e.target;
+  if(t.dataset.slt){var q=t.dataset.slt.split('|'),j=+q.pop(),k=q.join('|');var d=SG.vals[k];d.nd[j]=!d.nd[j];sgSave();sgRender()}});
+$('#sgAddR').onclick=function(){if(SG.dates.length>=10){alert('最多 10 次');return}SG.dates.push('');Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.push('');SG.vals[k].nd.push(false)});sgSave();sgRender()};
+$('#sgDelR').onclick=function(){if(SG.dates.length<=1)return;var j=SG.dates.length-1;if(Object.keys(SG.vals).some(function(k){return SG.vals[k].v[j]})&&!confirm('最後一次已有數據，確定刪除？'))return;SG.dates.pop();Object.keys(SG.vals).forEach(function(k){SG.vals[k].v.pop();SG.vals[k].nd.pop()});sgSave();sgRender()};
+$('#sgClear').onclick=function(){if(!confirm('清空所有已填的數值？'))return;SG={dates:['','','','','',''],vals:{}};sgSave();sgRender()};
+$('#sgApply').onclick=function(){
+  var n=0,low=[];sgRows().forEach(function(r){var c=sgCalc(r);if(c.x==null)return;
+    r.it.conc=sgFmt(c.x);r.it.src='x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.n<6)low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
+  if(!n){alert('尚未填任何數值');return}
+  renderSegs();save();update(true);$('#sgModal').classList.remove('show');
+  toast('已套用 '+n+' 項濃度（來源：統計表 X95）'+(low.length?'\n未滿 6 次、改取最高值：'+low.join('、'):''))};
+function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
+$('#sgExp').onclick=function(){
+  var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
+  var nd=SG.dates.length,cells={},merges=[];
+  function put(r,c,v,st){cells[r+','+c]={v:v,s:st}}
+  var cX=4+nd,cM=cX+1,cL=cX+2;
+  ['SEG代號','化學品','容許濃度','單位'].forEach(function(t,i){put(0,i,t,1);put(1,i,'',1);merges.push(sgColL(i)+'1:'+sgColL(i)+'2')});
+  put(0,4,'歷年監測日期/數據結果',1);for(var j=1;j<nd;j++)put(0,4+j,'',1);if(nd>1)merges.push('E1:'+sgColL(3+nd)+'1');
+  SG.dates.forEach(function(d,j){var n=parseInt(d);put(1,4+j,isNaN(n)?d:n,1)});
+  [[cX,'第95百分位1'],[cM,'取值方式'],[cL,'暴露等級2']].forEach(function(a){put(0,a[0],a[1],1);put(1,a[0],'',1);merges.push(sgColL(a[0])+'1:'+sgColL(a[0])+'2')});
+  rows.forEach(function(r,i){var c=sgCalc(r),rr=2+i;
+    put(rr,0,r.g.code,2);put(rr,1,r.it.name,2);put(rr,2,isNaN(r.inf.pel)?'—':r.inf.pel,2);put(rr,3,r.inf.unit==='mg/m³'?'mg/m3':r.inf.unit,2);
+    SG.dates.forEach(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);put(rr,4+j,p?p.n:'',p?(p.nd?4:3):2)});
+    put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2);put(rr,cM,c.method,2);put(rr,cL,c.lv||'',2)});
+  var rr=2+rows.length;
+  ['1.95%的信賴區間推估出該相似暴露群之平均暴露濃度(使用MS-Excel之內建函數(PERCENTILE) 計算求得)；未滿6次者取最高值','2.暴露等級= X95<0.5PEL為第一級；0.5PEL≦ X95<PEL為第二級；X95≧PEL為第三級','3.粗體為無「<」之實測值，細體為報告上有「<」(低於定量極限) 之值；分級管理措施詳監測報告'].forEach(function(t,k){put(rr+k,0,t,5)});
+  rr+=4;put(rr,0,'SEG與監測處所對照',5);
+  var mp=[],seen={};state.segs.forEach(function(g){var k=String(g.code);if(k&&!seen[k]){seen[k]=1;mp.push([k,g.name||''])}});
+  mp.forEach(function(a,i){put(rr+1+i,0,a[0],6);put(rr+1+i,1,a[1],5)});
+  var maxR=0,maxC=0;Object.keys(cells).forEach(function(k){var a=k.split(',');maxR=Math.max(maxR,+a[0]);maxC=Math.max(maxC,+a[1])});
+  var sd='';
+  for(var r=0;r<=maxR;r++){var rx='';for(var c=0;c<=maxC;c++){var x=cells[r+','+c];if(!x)continue;var ref=sgColL(c)+(r+1);
+    if(typeof x.v==='number')rx+='<c r="'+ref+'" s="'+x.s+'"><v>'+x.v+'</v></c>';else rx+='<c r="'+ref+'" s="'+x.s+'" t="inlineStr"><is><t xml:space="preserve">'+xe(x.v)+'</t></is></c>'}
+    if(rx)sd+='<row r="'+(r+1)+'">'+rx+'</row>'}
+  var cols='<cols><col min="1" max="1" width="11" customWidth="1"/><col min="2" max="2" width="20" customWidth="1"/><col min="3" max="4" width="9" customWidth="1"/><col min="5" max="'+(4+nd)+'" width="11" customWidth="1"/><col min="'+(cX+1)+'" max="'+(cX+1)+'" width="14" customWidth="1"/><col min="'+(cM+1)+'" max="'+(cM+1)+'" width="18" customWidth="1"/><col min="'+(cL+1)+'" max="'+(cL+1)+'" width="22" customWidth="1"/></cols>';
+  var sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'+cols+'<sheetData>'+sd+'</sheetData><mergeCells count="'+merges.length+'">'+merges.map(function(m){return'<mergeCell ref="'+m+'"/>'}).join('')+'</mergeCells></worksheet>';
+  var bd='<border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/><diagonal/></border>';
+  var styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="4"><font><sz val="11"/><name val="新細明體"/></font><font><b/><sz val="11"/><name val="新細明體"/></font><font><sz val="11"/><color rgb="FF1F4E9E"/><name val="Times New Roman"/></font><font><sz val="11"/><name val="Times New Roman"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border>'+bd+'</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="7">'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'+
+  '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+  '<xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+  '<xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'+
+  '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="left"/></xf>'+
+  '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="left"/></xf></cellXfs></styleSheet>';
+  var files=[{name:'[Content_Types].xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'},
+  {name:'_rels/.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'},
+  {name:'xl/workbook.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="工作表1" sheetId="1" r:id="rId1"/></sheets></workbook>'},
+  {name:'xl/_rels/workbook.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'},
+  {name:'xl/styles.xml',data:styles},{name:'xl/worksheets/sheet1.xml',data:sheet}];
+  var b=zipStore(files,'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=((state.name||'客戶')+'_統計表.xlsx').replace(/[\\\/:*?"<>|]/g,'_');document.body.appendChild(a);a.click();setTimeout(function(){URL.revokeObjectURL(a.href);a.remove()},500)};
 load();syncTop();renderChips();renderChem();renderSet();
 if(!state.segs.length&&MODE!=='self')state.segs.push(newSeg(1));
 renderSegs();update(true);
