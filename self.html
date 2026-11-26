@@ -321,7 +321,7 @@ function compute(cs, S, CH) {
       if (lg === 'unknown') r.notes.push('資料庫查無，請確認名稱');
       if (lg === 'check') r.notes.push('是否法定待確認');
       if (isNaN(pel)) r.notes.push('PEL 待輸入');
-      if (src !== 'x95' && ratio !== null) r.notes.push('暫用單次結果（缺統計表）');
+      
       rows.push(r);
     });
   });
@@ -428,7 +428,6 @@ function checkData(cs, CH) {
       if (it.isNew) return;
       var c = parseConc(it.conc);
       if (isNaN(c.v)) miss.push(nm + '（無任何濃度資料）');
-      else if ((it.src || 'x95') !== 'x95') miss.push(nm + '（目前暫用單次結果）');
     });
     if (miss.length) I.stat.push(code + '：' + miss.join('、'));
   });
@@ -605,7 +604,7 @@ function applyQov(R,st){
 function computeX(st,SET,CH){return applyQov(compute(st,SET,CH),st)}
 function finRows(R){
   var list=[];
-  R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:dispName(r),qk:r.qk,n:r.n,freq:r.freq,note:[(r.freq===3?'每3個月':''),(r.src!=='x95'&&r.ratio!==null?'暫用單次結果':''),(r.qadj?'報價數量已調整':''),(r.remark||'')].filter(Boolean).join('；')})});
+  R.rows.forEach(function(r){if(r.n>0)list.push({seg:r.seg,segName:r.segName,item:dispName(r),qk:r.qk,n:r.n,freq:r.freq,note:[(r.freq===3?'每3個月':''),(r.qadj?'報價數量已調整':''),(r.remark||'')].filter(Boolean).join('；')})});
   R.keep.forEach(function(k){if(k.n>0)list.push({seg:k.seg,segName:k.segName,item:dispName(k),qk:k.qk,method:k.method,n:k.n,freq:k.freq,note:k.why+(k.qadj?'；報價數量已調整':'')})});
   list.sort(function(a,b){return segCmp(a.seg,b.seg)||(a.item<b.item?-1:1)});
   return list;
@@ -773,7 +772,7 @@ async function unzipAll(buf){
   return out}
 function adjReason(r,S){
   var pct=fmtPct(r.ratio),cn=String(r.conc==null?'':r.conc).trim();
-  var judge='判定濃度 '+cn+' '+r.unit+'，為容許濃度（'+r.pel+' '+r.unit+'）的 '+pct+(r.src!=='x95'?'（暫用單次結果）':'')+'。';
+  var judge='判定濃度 '+cn+' '+r.unit+'，為容許濃度（'+r.pel+' '+r.unit+'）的 '+pct+'。';
   var nt=(r.notes||[]).join('|'),pp='';
   if(/3～9人/.test(nt))pp='另本族群勞工 '+r.people+' 人（3 人以上未達 10 人），依公告但書至少為 3 個樣本，故本次為 '+r.n+' 個。';
   else if(/未達3人/.test(nt))pp='另本族群勞工 '+r.people+' 人（未達 3 人），依公告但書全部勞工採樣，故本次為 '+r.n+' 個。';
@@ -792,9 +791,9 @@ function adjReason(r,S){
   var P=r.people>0?r.people+' 人':'—',hl='';
   if(!r.skip){
     if(r.qadj)hl='⟦本次報價樣本數調整為 '+r.n+' 個（本族群勞工 '+P+'）⟧。';
-    else if(r.remark)hl='⟦本級距樣本數不依 SEG 人數調整，每次採 '+r.n+' 個樣本⟧。';
+    else if(r.remark)hl='⟦本級距樣本數不依 SEG 人數調整，每次採 '+r.n+' 個樣本，'+String(r.remark).replace(/^本級距每次 \d+ 個樣本，/,'')+'⟧。';
     else if(!pp)hl='⟦本族群勞工 '+P+(r.people>=10?'（10 人以上）':'')+'，每次採 '+r.n+' 個樣本⟧。';
-    if(r.remark)hl+=' ⟦'+r.remark+'⟧。'}
+  }
   return{fq:fq,txt:txt+(hl?' '+hl:'')+personal}
 }
 function buildAdjDocx(R,G,st){st=st||state;
@@ -813,7 +812,6 @@ function buildAdjDocx(R,G,st){st=st||state;
   var otherPhys=kp.filter(function(k){return k.why==='物理性，維持現況'&&!/噪音/.test(k.item)});
   var nonlegal=kp.filter(function(k){return /非法定|依場所/.test(k.why||'')});
   var B=[];
-  if(!G.complete)B.push(wPara('【暫估：資料尚未補齊，僅供內部參考，勿直接提供客戶】',{sz:22,color:'C0392B',jc:'center',b:true}));
   B.push(wPara('作業環境監測點數調整說明',{sz:36,b:true,color:'12355B',jc:'center',after:60}));
   B.push(wPara(cname,{sz:28,b:true,jc:'center',after:40}));
   B.push(wPara('安平技術顧問有限公司　'+roc,{sz:22,color:'4A5868',jc:'center',after:160}));
@@ -907,7 +905,6 @@ function buildQuoteDocx(R,G,st,q){
   var A=chemAgg(R,q),r1=function(x){return Math.round(x*10)/10};
   var qlab=q===1?'1 次（每六個月）':(q===2?'2 次（年約）':(q===6?'6 次（三年約）':q+' 次'));
   var B=[];
-  if(!G.complete)B.push(qPara('【暫估】資料尚未補齊，數量可能變動，請勿作為正式報價依據',{sz:20,b:true,color:'B42318',jc:'center',after:120}));
   B.push(qPara('作業環境監測　報價數量表',{sz:36,b:true,color:'1F5A46',after:40}));
   B.push(qPara('依 116.1.1 新制測點數計算',{sz:19,color:'6B766F',after:200}));
   var IW=[1500,3369,1500,3269];
