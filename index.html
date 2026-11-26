@@ -773,7 +773,7 @@ function adjReason(r,S){
   var P=r.people>0?r.people+' 人':'—',hl='';
   if(!r.skip){
     if(r.qadj)hl='⟦本次報價樣本數調整為 '+r.n+' 個（本族群勞工 '+P+'）⟧。';
-    else if(r.tier&&r.tier.key==='tenth'&&r.remark)hl='⟦本級距樣本數不依 SEG 人數調整。新制要求每年內應測滿 6 個樣本，建議每 2 個月採 1 個樣本，一年即可達 6 個樣本（單一人員作業亦可執行）。監測頻率法規目前無明確限制，由貴廠自行決定監測頻率⟧。';
+    else if(r.tier&&r.tier.key==='tenth'&&r.remark&&r.people>=1&&r.people<=2){var pn1=r.people;hl='⟦本級距樣本數不依 SEG 人數調整。本族群僅 '+pn1+' 人，每 6 個月至多採 '+pn1+' 個樣本，一年僅 '+(pn1*2)+' 個樣本；新制要求每年內應測滿 6 個樣本，建議每 '+(pn1===1?2:4)+' 個月採 '+pn1+' 個樣本，一年即可達 6 個樣本。監測頻率法規目前無明確限制，由貴廠自行決定監測頻率⟧。';}
     else if(r.remark)hl='⟦本級距樣本數不依 SEG 人數調整，每次採 '+r.n+' 個樣本，'+String(r.remark).replace(/^本級距每次 \d+ 個樣本，/,'')+'⟧。';
     else if(!pp)hl='⟦本族群勞工 '+P+(r.people>=10?'（10 人以上）':'')+'，每次採 '+r.n+' 個樣本⟧。';
   }
