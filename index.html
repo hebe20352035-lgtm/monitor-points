@@ -1766,10 +1766,10 @@ $('#sgFile').onchange=async function(){
     (msgs.length?'<br><span style="color:#B5651D">'+msgs.map(esc).join('<br>')+'</span>':'')+'<br>請核對後按「套用到系統」。'};
 $('#sgApply').onclick=function(){
   var n=0,low=[];sgRows().forEach(function(r){var c=sgCalc(r);if(c.x==null)return;
-    r.it.conc=sgFmt(c.x);r.it.src='x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.n<6)low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
+    r.it.conc=sgFmt(c.x);r.it.src=c.n<6?'single':'x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.n<6)low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
   if(!n){alert('尚未填任何數值');return}
   renderSegs();save();update(true);$('#sgModal').classList.remove('show');
-  toast('已套用 '+n+' 項濃度（來源：統計表 X95）'+(low.length?'\n未滿 6 次、改取最高值：'+low.join('、'):''))};
+  toast('已套用 '+n+' 項濃度（滿 6 次：統計表 X95；未滿 6 次：單次結果）'+(low.length?'\n未滿 6 次、改取最高值、來源改單次結果：'+low.join('、'):''))};
 function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
 $('#sgExp').onclick=function(){
   var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
