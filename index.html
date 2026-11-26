@@ -450,7 +450,9 @@ function newSeg(n){return{code:'SEG'+String(n).padStart(2,'0'),name:'',group:'',
 (function(){var h='';CH.forEach(function(c){h+='<option value="'+esc(c.z)+'">'+esc(c.c)+'</option>'});$('#chemlist').innerHTML=h})();
 
 /* ---------- SEG 卡片 ---------- */
+function noPeople(g){return g.code!=='全廠'&&!(parseFloat(g.people)>0)}
 function flagNote(g,k){
+  if(k==='people'&&!(g.flag&&g.flag.people)&&noPeople(g))return'<span class="fn pnone">人數未填或讀不到，請填入</span>';
   var f=g.flag&&g.flag[k];if(!f)return'';
   if(f.soft)return'<span class="fn soft">採樣策略表：'+esc(f.other)+'</span>';
   return'<span class="fn">'+(k==='name'?'採樣策略表寫「'+esc(f.other)+'」':'採樣策略表寫 '+esc(f.other)+' 人')+'<button data-act="okFlag" data-k="'+k+'">確認無誤</button></span>';
@@ -462,7 +464,7 @@ function renderSegs(){
     '<label class="f">SEG 代號<input data-f="code" value="'+esc(g.code)+'"></label>'+
     '<label class="f">區域／部門<input data-f="name" class="'+((g.flag&&g.flag.name&&!g.flag.name.soft)?'bad':'')+'" value="'+esc(g.name)+'">'+flagNote(g,'name')+'</label>'+
     '<label class="f advg">作業組別<input data-f="group" value="'+esc(g.group)+'" placeholder="同類作業寫一樣"></label>'+
-    '<label class="f">人數<input data-f="people" class="'+((g.flag&&g.flag.people)?'bad':'')+'" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'">'+flagNote(g,'people')+'</label>'+
+    '<label class="f">人數<input data-f="people" class="'+((g.flag&&g.flag.people)||noPeople(g)?'bad':'')+'" type="number" inputmode="numeric" min="0" value="'+esc(g.people)+'">'+flagNote(g,'people')+'</label>'+
     '<button class="btn sm del" data-act="delSeg">刪除 SEG</button></div>'+
     '<div class="items"><table><thead><tr><th style="width:22%">化學品（採樣策略表）</th><th style="width:8%">現況點數<br><span class="hint">採樣策略表</span></th><th style="width:14%">濃度</th><th style="width:11%">濃度來源</th><th class="adv-col" style="width:11%">單位</th><th class="adv-col" style="width:11%">PEL</th><th>佔PEL／狀態</th><th></th></tr></thead><tbody>';
     g.items.forEach(function(it,ii){h+=itemRow(g,it,gi,ii)});
@@ -527,6 +529,7 @@ $('#segs').addEventListener('input',function(e){
       var us=tr.querySelector('[data-f=unit]');us.options[0].text='自動('+inf.unit+')';}
   }else{g[f]=t.value;
     if(g.flag&&g.flag[f]&&!g.flag[f].soft){delete g.flag[f];t.classList.remove('bad');var fn1=t.parentNode.querySelector('.fn');if(fn1)fn1.remove()}}
+  if(!tr&&f==='people'){var pnx=t.parentNode.querySelector('.fn.pnone');if(noPeople(g)&&!(g.flag&&g.flag.people)){t.classList.add('bad');if(!pnx){var sp=document.createElement('span');sp.className='fn pnone';sp.textContent='人數未填或讀不到，請填入';t.parentNode.appendChild(sp)}}else if(!(g.flag&&g.flag.people)){t.classList.remove('bad');if(pnx)pnx.remove()}}
   save();update(false);
 });
 $('#segs').addEventListener('click',function(e){
@@ -921,7 +924,8 @@ function buildQuoteDocx(R,G,st,q){
     g.forEach(function(r){frs.push(r)})});
   frs.forEach(function(r){var key=r.seg+'|'+(r.segName||''),first=key!==last;last=key;
     var nt=r._dust===1?{t:DUSTN,sz:18,color:'C00000',vm:'restart'}:(r._dust===2?{t:'',sz:18,vm:'cont'}:{t:r.note||'',sz:18,color:'55605A'});
-    rows2.push([{t:first?(r.seg+(r.segName?'　'+r.segName:'')):''},{t:r.item},{t:String(r.n),jc:'center',b:true},{t:String(r1(r.n*(12/r.freq))),jc:'center'},nt])});
+    var segc=frs.filter(function(x){return x.seg+'|'+(x.segName||'')===key}).length;
+    rows2.push([first?{t:r.seg+(r.segName?'　'+r.segName:''),vm:segc>1?'restart':''}:{t:'',vm:'cont'},{t:r.item},{t:String(r.n),jc:'center',b:true},{t:String(r1(r.n*(12/r.freq))),jc:'center'},nt])});
   rows2.push([{t:"合計",span:2,w:4400,b:true,fill:"EEF3F0"},{t:String(S.final),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(S.finalYear)),jc:'center',b:true,fill:'EEF3F0'},{t:'',fill:'EEF3F0'}]);
   B.push(qTbl(W2,['SEG／區域','項目','每輪測點','全年測點','備註'],rows2));
   B.push(qPara('註：測點數以現行 116.1.1 新制規則計算；全年測點 ＝ 每輪測點 × 每年次數。',{sz:18,color:'6B766F',before:160}));
