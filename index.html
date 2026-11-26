@@ -872,7 +872,7 @@ function dlWord(R,G,st,fid){
 /* ---------- 報價單 Word（給報價組） ---------- */
 var QRF='<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="微軟正黑體" w:cs="Calibri"/>';
 function qRun(t,o){o=o||{};var sz=o.sz||21;return'<w:r><w:rPr>'+QRF+(o.b?'<w:b/>':'')+'<w:sz w:val="'+sz+'"/><w:szCs w:val="'+sz+'"/>'+(o.color?'<w:color w:val="'+o.color+'"/>':'')+'</w:rPr><w:t xml:space="preserve">'+xe(t)+'</w:t></w:r>'}
-function qPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?0:o.after)+'" w:line="'+(o.line||276)+'" w:lineRule="auto"/><w:jc w:val="'+(o.jc||'left')+'"/></w:pPr>'+qRun(t,o)+'</w:p>'}
+function qPara(t,o){o=o||{};return'<w:p><w:pPr>'+(o.keep?'<w:keepNext/>':'')+(o.pb?'<w:pageBreakBefore/>':'')+'<w:spacing w:before="'+(o.before||0)+'" w:after="'+(o.after==null?0:o.after)+'" w:line="'+(o.line||276)+'" w:lineRule="auto"/><w:jc w:val="'+(o.jc||'left')+'"/></w:pPr>'+qRun(t,o)+'</w:p>'}
 function qCell(w,t,o){o=o||{};return'<w:tc><w:tcPr><w:tcW w:w="'+w+'" w:type="dxa"/>'+(o.span?'<w:gridSpan w:val="'+o.span+'"/>':'')+(o.vm==='restart'?'<w:vMerge w:val="restart"/>':(o.vm==='cont'?'<w:vMerge/>':''))+(o.fill?'<w:shd w:val="clear" w:color="auto" w:fill="'+o.fill+'"/>':'')+'<w:vAlign w:val="center"/></w:tcPr>'+qPara(t,{sz:o.sz||21,b:o.b,color:o.color,jc:o.jc||'left',line:260})+'</w:tc>'}
 function qTbl(W,head,rows,o){o=o||{};var tw=W.reduce(function(a,b){return a+b},0),bc=o.bc||'C9D3CD';
   var T='<w:tbl><w:tblPr><w:tblW w:w="'+tw+'" w:type="dxa"/><w:tblBorders>'+['top','left','bottom','right','insideH','insideV'].map(function(b){return'<w:'+b+' w:val="'+(o.none?'nil':'single')+'" w:sz="4" w:color="'+bc+'"/>'}).join('')+'</w:tblBorders><w:tblLayout w:type="fixed"/><w:tblCellMar><w:top w:w="70" w:type="dxa"/><w:left w:w="110" w:type="dxa"/><w:bottom w:w="70" w:type="dxa"/><w:right w:w="110" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>'+W.map(function(w){return'<w:gridCol w:w="'+w+'"/>'}).join('')+'</w:tblGrid>';
@@ -912,7 +912,7 @@ function buildQuoteDocx(R,G,st,q){
   qItems(A,st).forEach(function(it,i){var nm=it.name,c=it.n;tot+=c*q;rows1.push([{t:String(i+1),jc:'center'},{t:nm},{t:String(c),jc:'center',b:true},{t:String(q),jc:'center'},{t:String(r1(c*q)),jc:'center'}])});
   rows1.push([{t:'合計',span:2,w:5138,b:true,fill:'EEF3F0'},{t:String(r1(tot/q)),jc:'center',b:true,fill:'EEF3F0'},{t:String(q),jc:'center',b:true,fill:'EEF3F0'},{t:String(r1(tot)),jc:'center',b:true,fill:'EEF3F0'}]);
   B.push(qTbl(W1,['編號','品名','數量（點）','頻率（次）','小計（點）'],rows1));
-  B.push(qPara('二、各 SEG 測點數',{sz:26,b:true,color:'1F5A46',keep:true,before:320,after:100}));
+  B.push(qPara('二、各 SEG 測點數',{sz:26,b:true,color:'1F5A46',keep:true,pb:true,before:0,after:100}));
   var W2=[2100,2300,1250,1250,2738],rows2=[],last='';
   var DUSTN='兩種粉塵差別在於捕集粒徑大小不同，建議選其一做監測(例如：上半年測總粉，下半年測可呼)';
   var frs=[],gmap={},gord=[];
