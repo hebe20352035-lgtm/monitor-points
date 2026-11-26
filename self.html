@@ -1262,7 +1262,7 @@ async function parseDocx(file){
       var s2;
       if(code2==='全廠'){s2=segOf('全廠',place||'全廠區','','')}
       else{s2=segs[code2];if(!s2){s2=segOf(code2,place,'',(String(rw[c9p]||'').match(/\d+/)||[''])[0]);res.notes.push(code2+' 只出現在採樣策略表，不在彙整表中')}
-        else{var pp=(String(rw[c9p]||'').match(/\d+/)||[''])[0];if(pp&&s2.people&&pp!==s2.people&&!(s2.flag&&s2.flag.people)){(s2.flag=s2.flag||{}).people={other:pp}}
+        else{var pp=(String(rw[c9p]||'').match(/\d+/)||[''])[0];if(pp&&!s2.people)s2.people=pp;if(pp&&s2.people&&pp!==s2.people&&!(s2.flag&&s2.flag.people)){(s2.flag=s2.flag||{}).people={other:pp}}
           var pn=normT(place);if(place&&s2.name&&normT(s2.name)!==pn&&!(s2.flag&&s2.flag.name)){var a1=normT(s2.name);(s2.flag=s2.flag||{}).name={other:place,soft:(a1.indexOf(pn)>=0||pn.indexOf(a1)>=0)}}}}
       String(rw[c9i]||'').replace(/\n/g,'').split(/[、，]/).forEach(function(part){
         part=part.trim();if(!part)return;
