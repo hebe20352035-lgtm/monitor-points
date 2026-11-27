@@ -72,7 +72,7 @@ textarea.say{width:100%;min-height:210px;line-height:1.7}
 .chip{border:1px solid var(--line);background:#fff;border-radius:14px;padding:3px 12px;cursor:pointer;font-size:13px}
 .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .sgtable{border-collapse:collapse;min-width:100%}.sgtable th,.sgtable td{border:1px solid var(--line);padding:3px 4px;text-align:center;font-size:14px;vertical-align:middle}.sgtable th{background:var(--soft);white-space:nowrap}
-.sgv{width:62px;text-align:center}.sgd{width:76px;text-align:center}.sgb{font-weight:700}.sgv.sgt{font-weight:400}.sglt{padding:2px 6px;margin-left:2px;color:var(--ink3)}.sglt.on{background:var(--accent);color:#fff;border-color:var(--accent)}.sg1{color:#1b7a46}.sg2{color:var(--warm);font-weight:600}.sg3{color:var(--bad);font-weight:700}
+.sgv{width:62px;text-align:center}.sgd{width:76px;text-align:center}.sgb{font-weight:700}.sgv.sgt{font-weight:400}.sglt{padding:2px 6px;margin-left:2px;color:var(--ink3)}.sglt.on{background:var(--accent);color:#fff;border-color:var(--accent)}.sgmode{font-size:12px;padding:2px 4px;max-width:96px}.sg1{color:#1b7a46}.sg2{color:var(--warm);font-weight:600}.sg3{color:var(--bad);font-weight:700}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:50;display:none;align-items:center;justify-content:center;padding:14px}
 .modal.show{display:flex}
 .modal .box{background:#fff;border-radius:12px;padding:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto}
@@ -1674,7 +1674,9 @@ function sgCalc(r){
   var o={n:vs.length,pel:r.inf.pel};
   if(!vs.length){o.method='待填';return o}
   var nums=vs.map(function(p){return p.n});
-  if(vs.length>=6){o.x=sgPct(nums,0.95);o.method='第95百分位'}else{o.x=Math.max.apply(null,nums);o.method='取最高值（'+vs.length+'次）'}
+  var md=r.d.mode||'';if(md!=='p95'&&md!=='max')md=vs.length>=6?'p95':'max';
+  o.mode=md;
+  if(md==='p95'){o.x=sgPct(nums,0.95);o.method='第95百分位'}else{o.x=Math.max.apply(null,nums);o.method='取最高值（'+vs.length+'次）'}
   o.lv=isNaN(o.pel)?'待確認':(o.x>=o.pel?'第三級':(o.x>=o.pel*0.5?'第二級':'第一級'));
   return o}
 function sgRender(){
@@ -1683,13 +1685,14 @@ function sgRender(){
   rows.forEach(function(r,i){var c=sgCalc(r);
     h+='<tr><td>'+esc(r.g.code)+'</td><td style="text-align:left;min-width:90px">'+esc(r.g.name||'')+'</td><td style="text-align:left">'+esc(r.it.name)+'</td><td>'+(isNaN(r.inf.pel)?'?':r.inf.pel)+' '+esc(r.inf.unit)+'</td>'+
     SG.dates.map(function(d,j){var p=sgParse(r.d.v[j],r.d.nd[j]);return'<td style="white-space:nowrap"><input class="sgv '+(p&&!p.nd?'sgb':'sgt')+'" data-sk="'+esc(r.k)+'" data-sc="'+j+'" value="'+esc(r.d.v[j])+'"><button class="btn sm sglt'+(r.d.nd[j]?' on':'')+'" data-slt="'+esc(r.k)+'|'+j+'" title="報告上有「<」就按亮">&lt;</button></td>'}).join('')+
-    '<td>'+(c.x==null?'—':'<b>'+sgFmt(c.x)+'</b>')+'</td><td class="hint">'+esc(c.method)+'</td><td class="'+(c.lv==='第三級'?'sg3':c.lv==='第二級'?'sg2':'sg1')+'">'+esc(c.lv||'')+'</td></tr>'});
+    '<td>'+(c.x==null?'—':'<b>'+sgFmt(c.x)+'</b>')+'</td><td class="hint"><select class="sgmode" data-smk="'+esc(r.k)+'"><option value=""'+(!r.d.mode?' selected':'')+'>自動</option><option value="p95"'+(r.d.mode==='p95'?' selected':'')+'>第95百分位</option><option value="max"'+(r.d.mode==='max'?' selected':'')+'>最高值</option></select><div>'+esc(c.method)+'</div></td><td class="'+(c.lv==='第三級'?'sg3':c.lv==='第二級'?'sg2':'sg1')+'">'+esc(c.lv||'')+'</td></tr>'});
   $('#sgTb').innerHTML=h;
   $('#sgEmpty').style.display=rows.length?'none':'block'}
 function sgOpen(){if(!state.segs.length){alert('請先匯入計畫書');return}$('#sgModal').classList.add('show');sgRender()}
 $('#openSg').onclick=sgOpen;
 $('#sgClose').onclick=function(){$('#sgModal').classList.remove('show')};
 $('#sgModal').addEventListener('change',function(e){var t=e.target;
+  if(t.dataset.smk){var dm=SG.vals[t.dataset.smk];if(dm){dm.mode=t.value;sgSave();setTimeout(sgRender,0)}return}
   if(t.dataset.sd!=null){SG.dates[+t.dataset.sd]=t.value.trim();sgSave();return}
   if(t.dataset.sk){var d=SG.vals[t.dataset.sk],j=+t.dataset.sc,raw=t.value.trim();if(/[<＜]/.test(raw))d.nd[j]=true;d.v[j]=raw.replace(/[<＜]/g,'');sgSave();setTimeout(sgRender,0)}});
 $('#sgModal').addEventListener('click',function(e){var t=e.target;
@@ -1780,10 +1783,10 @@ $('#sgFile').onchange=async function(){
     (msgs.length?'<br><span style="color:#B5651D">'+msgs.map(esc).join('<br>')+'</span>':'')+'<br>請核對後按「套用到系統」。'};
 $('#sgApply').onclick=function(){
   var n=0,low=[];sgRows().forEach(function(r){var c=sgCalc(r);if(c.x==null)return;
-    r.it.conc=sgFmt(c.x);r.it.src=c.n<6?'single':'x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.n<6)low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
+    r.it.conc=sgFmt(c.x);r.it.src=c.mode==='max'?'single':'x95';if(r.it.sflag)delete r.it.sflag;if(r.it.flag==='name')delete r.it.flag;n++;if(c.mode==='max')low.push(r.g.code+' '+r.it.name+'（'+c.n+'次，取最高值）')});
   if(!n){alert('尚未填任何數值');return}
   renderSegs();save();update(true);$('#sgModal').classList.remove('show');
-  toast('已套用 '+n+' 項濃度（滿 6 次：統計表 X95；未滿 6 次：單次結果）'+(low.length?'\n未滿 6 次、改取最高值、來源改單次結果：'+low.join('、'):''))};
+  toast('已套用 '+n+' 項濃度（第95百分位：統計表 X95；最高值：單次結果）'+(low.length?'\n取最高值、來源改單次結果：'+low.join('、'):''))};
 function sgColL(i){var s='';i++;while(i>0){var m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s}
 $('#sgExp').onclick=function(){
   var rows=sgRows().filter(function(r){return sgCalc(r).x!=null});if(!rows.length){alert('尚未填任何數值');return}
@@ -1798,7 +1801,7 @@ $('#sgExp').onclick=function(){
     put(rr,0,r.g.code,2);put(rr,1,r.it.name,2);put(rr,2,isNaN(r.inf.pel)?'—':r.inf.pel,2);put(rr,3,r.inf.unit==='mg/m³'?'mg/m3':r.inf.unit,2);
     for(var j=0;j<nd;j++){var p=j<SG.dates.length?sgParse(r.d.v[j],r.d.nd[j]):null;put(rr,4+j,p?p.n:'',p?(p.nd?4:3):2)}
     var rg='E'+(rr+1)+':'+sgColL(3+nd)+(rr+1),xc=sgColL(cX)+(rr+1);
-    put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2,'IFERROR(_xlfn.PERCENTILE.INC('+rg+',0.95),0)');
+    put(rr,cX,parseFloat(Number(c.x).toPrecision(6)),2,c.mode==='max'?'IFERROR(MAX('+rg+'),0)':'IFERROR(_xlfn.PERCENTILE.INC('+rg+',0.95),0)');
     put(rr,cL,c.lv||'',2,'IFERROR(IF('+xc+'>=C'+(rr+1)+',"第三級",IF('+xc+'>=C'+(rr+1)+'*0.5,"第二級","第一級")),"")')});
   var rr=2+rows.length;
   var FNT='1.95%的信賴區間推估出該相似暴露群之平均暴露濃度(使用MS-Excel之內建函數(PERCENTILE) 計算求得)\n2.暴露等級= X95<0.5PEL為第一級；0.5PEL≦ X95<PEL為第二級；X95≧PEL為第三級\n3.分級管理措施詳監測報告';
