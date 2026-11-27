@@ -338,6 +338,7 @@ function compute(cs, S, CH) {
     r.mode = 'newchem'; setN(r, 6, 6); r.notes.push('新增化學品，免填濃度，初始採樣每 6 個月測滿 6 個樣本');
   });
   var rest = rows.filter(function (r) { return !r.isNew; });
+  if (!big) rest.forEach(function (r) { if (r.tier.key === 'tenth' || r.tier.key === 'low') r.tier = { key: r.tier.key, label: '< 1/2 PEL' }; });
   if (big) {
     rest.forEach(function (r) {
       var t = r.tier.key; r.mode = r.ratio === null ? 'nodata' : 'tier';
@@ -856,7 +857,7 @@ function buildAdjDocx(R,G,st){st=st||state;
   var fn2=[];
   if(!S.big&&skipItems.length)fn2.push('未達 100 人之項目（'+skipItems.join('、')+'）各族群濃度均低於容許標準 1/2，僅測濃度最高之族群；若其他 SEG 有製程異動、淡旺季差異等情形，建議另行採樣。');
   var q4=[];rows.forEach(function(r){if(!r.skip&&r.freq===3&&q4.indexOf(r.item)<0)q4.push(r.item)});
-  if(q4.length)fn2.push(q4.join('、')+'目前須每 3 個月監測（一年 4 次）。需連續 4 次（滿一年）之監測值皆低於容許標準 1/2 或 1/10，才可重新計算樣本數；僅單次低於 1/2 或 1/10，不能立即重新計算。');
+  if(q4.length)fn2.push(q4.join('、')+'目前須每 3 個月監測（一年 4 次）。除已確實實施工程控制、行政管理且有效降低個人暴露濃度者外，應連續 4 次（滿一年）之監測值皆低於容許標準，才可重新判定監測級距；若僅單次低於容許標準，不能立即重新計算。');
   fn2.forEach(function(t,i){B.push(wPara('附註'+(fn2.length>1?['一','二'][i]:'')+'：'+t,{sz:20,color:'4A5868',before:i?40:80}))});
   var NS='xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
   var HD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
