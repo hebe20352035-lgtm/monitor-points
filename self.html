@@ -1401,7 +1401,7 @@ function gridToStat(g){
     for(var r=h+1;r<g.length;r++){
       var row=g[r];var sm=segCodeOf(row[cs]);if(sm)lastSeg=sm;else if(normT(row[cs]))continue;
       var nm=String(row[cn]||'').trim();if(!nm||!lastSeg)continue;
-      var v=String(row[cv]||'').replace(/[<＜\s]/g,'');if(!/^\d*\.?\d+$/.test(v))continue;v=String(parseFloat(parseFloat(v).toPrecision(6)));
+      var v=String(row[cv]||'').replace(/[<＜\s]/g,'');if(!/^\d*\.?\d+(e[-+]?\d+)?$/i.test(v))continue;v=String(parseFloat(parseFloat(v).toPrecision(6)));
       out.push({seg:lastSeg,name:nm,unit:cu>=0?String(row[cu]||'').trim():'',x95:v})}
     if(out.length)break}
   return out}
