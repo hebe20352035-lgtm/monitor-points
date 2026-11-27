@@ -502,7 +502,7 @@ function itemRow(g,it,gi,ii){
   var inf=itemInfo(it);var ph=isNaN(inf.pel)?'':inf.pel;
   var kd=rowKind(it);var gray=(kd==='k-gray');var nw=!gray&&!!it.isNew;
   var isNoise=/噪音/.test(it.name||'');var mt=String(it.method||'');
-  var mtHtml=isNoise?'<select data-f="method" class="mtsel"><option value="">請選：區域或個人（劑量）</option><option value="區域採樣"'+(/區域/.test(mt)?' selected':'')+'>區域採樣（區域噪音）</option><option value="個人採樣"'+(mt&&!/區域/.test(mt)?' selected':'')+'>個人採樣（劑量噪音）</option></select>':((it.isNew||/^(短時間採樣)?$/.test(mt))?'<select data-f="method" class="mtsel"><option value="">長時間（8 小時）</option><option value="短時間採樣"'+(/短時間/.test(mt)?' selected':'')+'>短時間</option></select>':'<span class="mt">'+esc(mt)+'</span>');
+  var mtHtml=isNoise?'<select data-f="method" class="mtsel"><option value="">請選：區域或個人（劑量）</option><option value="區域採樣"'+(/區域/.test(mt)?' selected':'')+'>區域採樣（區域噪音）</option><option value="個人採樣"'+(mt&&!/區域/.test(mt)?' selected':'')+'>個人採樣（劑量噪音）</option></select>':('<select data-f="method" class="mtsel"><option value="">長時間（8 小時）</option><option value="短時間採樣"'+(mt==='短時間採樣'?' selected':'')+'>短時間</option>'+((mt&&mt!=='短時間採樣')?'<option value="'+esc(mt)+'" selected>'+esc(mt)+'（計畫書）</option>':'')+'</select>');
   return'<tr data-i="'+ii+'" class="'+kd+'">'+
   '<td><input data-f="name" list="chemlist" class="'+(it.flag==='name'?'bad':'')+'" value="'+esc(it.name)+'" placeholder="中文名或 CAS">'+(it.flag==='name'?'<span class="fn">彙整表沒有此項</span>':'')+mtHtml+'</td>'+
   '<td><input data-f="cur" type="number" inputmode="numeric" min="0" class="'+(it.flag==='cur'?'bad':'')+'" value="'+esc(it.cur)+'">'+(it.flag==='cur'?'<span class="fn">採樣策略表沒有</span>':'')+'</td>'+
